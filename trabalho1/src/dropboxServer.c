@@ -45,9 +45,10 @@ struct file_info
   int size; // indica o tamanho do arquivo, em bytes.
 };
 
-// server information
+// server info
 int sockfd, PORT;
 struct sockaddr_in serv_addr;
+char buffer[256];
 
 int main(int argc, char *argv[])
 {
@@ -55,7 +56,6 @@ int main(int argc, char *argv[])
   int n;
   struct sockaddr_in cli_addr;
   socklen_t clilen;
-  char buffer[256];
 
   if (argc != 3)
   {
@@ -65,27 +65,28 @@ int main(int argc, char *argv[])
 
   printf("[server]: atempting to create socket: \"%s:%s\"\n", argv[1], argv[2]);
 
-  server_init(argv[1], argv[2]);
+  if ((server_init(argv[1], argv[2])) != 0)
+    printf("[server]: ERROR server_init failed\n");
 
   printf("[server]: server is up and running!\n");
   printf("[server]: listening on %s:%d\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
 
+  clilen = sizeof(struct sockaddr_in);
+  if ((newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen)) == -1)
+  {
+    printf("[server]: ERROR on accept\n");
+    perror("[server]: accept");
+    exit(1);
+  }
+
+
+  printf("[server]: incoming connection from %s\n", inet_ntoa(cli_addr.sin_addr));
+
+
+  int first = 0; // first time a user connects
   while(1)
   {
-
-    clilen = sizeof(struct sockaddr_in);
-    if ((newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen)) == -1)
-    {
-      printf("[server]: ERROR on accept\n");
-      perror("[server]: accept");
-      exit(1);
-    }
-
-
-    printf("[server]: incoming connection from %s\n", inet_ntoa(cli_addr.sin_addr));
-
     bzero(buffer, 256);
-
     // int getpeername(int sockfd, struct sockaddr *addr, int *addrlen);
     // int gethostname(char *hostname, size_t size);
 
@@ -99,7 +100,6 @@ int main(int argc, char *argv[])
     //       }
     // close(new_fd); // parent doesn't need this
 
-
     /* read from the socket */
     n = read(newsockfd, buffer, 256);
     if (n < 0)
@@ -107,7 +107,18 @@ int main(int argc, char *argv[])
     if (n == 0)
       printf("[server]: ERROR reading from socket: connection closed by client\n");
 
-    printf("[server]: message received: %s\n", buffer);
+    if (first == 0)
+    {
+      if ((verify_user_server()) < 0)
+      {
+        printf("[server]: ERROR verify_user failed\n");
+        exit(1);
+      }
+      first = 1;
+    } else
+      {
+        printf("[server]: message received: %s\n", buffer);
+      }
 
     /* write in the socket */
     n = write(newsockfd,"[server]: I got your message\n", 18);
@@ -183,4 +194,13 @@ int server_init(char *s_ip, char *s_port)
     perror("[server]: listen");
     exit(1);
   }
+
+  return 0;
+}
+
+
+int verify_user_server()
+{
+  printf("[server]: new user connecting: %s\n", buffer);
+  return 0;
 }

@@ -26,11 +26,12 @@
 
 #include "./dropboxServer.h"
 
+int sockfd, n; // socket file descriptor
+struct sockaddr_in serv_addr; // server address information
+struct hostent *server;
+
 int main(int argc, char *argv[])
 {
-  int sockfd, n; // socket file descriptor
-  struct sockaddr_in serv_addr; // server address information
-  struct hostent *server;
   char buffer[256];
   int PORT = atoi(argv[3]);
 
@@ -41,14 +42,50 @@ int main(int argc, char *argv[])
   }
 
   printf("[client]: atempting to connect: \"%s@%s:%s\"\n", argv[1], argv[2], argv[3]);
-  // server = gethostbyname(argv[2]);
-  // if (server == NULL)
-  // {
-  //   fprintf(stderr,"[client]: ERROR, no such host\n");
-  //   exit(0);
-  // }
 
-  if ((server = gethostbyname(argv[2])) == NULL) {  // get the server info
+  connect_server(argv[2], PORT);
+
+  printf("[client]: connected to server: \"%s@%s:%d\"\n", argv[1], inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
+
+  verify_user_client(argv[1]);
+
+  while(1)
+  {
+    printf("[client]: message to send: ");
+    bzero(buffer, 256);
+    fgets(buffer, 256, stdin);
+
+    /* write in the socket */
+    if ((n = write(sockfd, buffer, strlen(buffer))) == -1)
+    {
+      printf("[client]: ERROR writing to socket\n");
+      perror("[client]: write");
+      exit(1);
+    }
+
+    bzero(buffer,256);
+
+    /* read from the socket */
+    if ((n = read(sockfd, buffer, 256)) == -1)
+    {
+      printf("[client]: ERROR reading from socket\n");
+      perror("[client]: read");
+      exit(1);
+    }
+
+    printf("%s\n", buffer);
+  }
+
+  close(sockfd);
+  return 0;
+}
+
+//* Conecta o cliente com o servidor.
+//* host – endereço do servidor
+//* port – porta aguardando conexão
+int connect_server(char *host, int port)
+{
+  if ((server = gethostbyname(host)) == NULL) {  // get the server info
         fprintf(stderr,"[client]: ERROR, no such host\n");
         perror("[client]: gethostbyname");
         exit(1);
@@ -62,7 +99,7 @@ int main(int argc, char *argv[])
   }
 
   serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(PORT);
+  serv_addr.sin_port = htons(port);
   serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
   bzero(&(serv_addr.sin_zero), 8);
 
@@ -72,41 +109,6 @@ int main(int argc, char *argv[])
     perror("[client]: connect");
     exit(1);
   }
-
-  printf("[client]: message to send: ");
-  bzero(buffer, 256);
-  fgets(buffer, 256, stdin);
-
-  /* write in the socket */
-  if ((n = write(sockfd, buffer, strlen(buffer))) == -1)
-  {
-    printf("[client]: ERROR writing to socket\n");
-    perror("[client]: write");
-    exit(1);
-  }
-
-  bzero(buffer,256);
-
-  /* read from the socket */
-  if ((n = read(sockfd, buffer, 256)) == -1)
-  {
-    printf("[client]: ERROR reading from socket\n");
-    perror("[client]: read");
-    exit(1);
-  }
-
-  printf("%s\n", buffer);
-
-  close(sockfd);
-  return 0;
-}
-
-//* Conecta o cliente com o servidor.
-//* host – endereço do servidor
-//* port – porta aguardando conexão
-int connect_server(char *host, int port)
-{
-
 }
 
 //* Sincroniza o diretório “sync_dir_<nomeusuário>” com o servidor.
@@ -133,4 +135,16 @@ void get_file(char *file)
 void close_connection()
 {
 
+}
+
+int verify_user_client(char *username)
+{
+  n = write(sockfd, username, 18);
+    if (n < 0)
+    {
+      printf("[client]: ERROR writing username to socket\n");
+      return -1;
+    }
+
+  return 0;
 }
