@@ -10,20 +10,32 @@ SRC=./src/
 DIRS=$(SRC)
 
 CC=gcc
-CCFLAGS=-c -lm -m32 -Wall -I$(INC)
+CCFLAGS=-c -lm -m32 -Wall
 
 all: main
 
-main: dropboxServer.o dropboxClient.o
+main: dropboxServer dropboxClient
 
-dropboxServer.o: dropboxUtil.o
-	$(CC) $(CCFLAGS) dropboxServer.o dropboxUtil.o -o dropboxServer
+dropboxServer: dropboxServer.o
+	$(CC) $(CCFLAGS) dropboxServer.o -o dropboxServer
 
-dropboxClient.o: dropboxUtil.o
-	$(CC) $(CCFLAGS) dropboxClient.o dropboxUtil.o -o dropboxClient
+dropboxClient: dropboxClient.o
+	$(CC) $(CCFLAGS) dropboxClient.o -o dropboxClient
 
-dropboxUtil.o:
-	$(CC) $(CCFLAGS) dropboxUtil.o -o
+dropboxServer.o:
+	$(CC) $(CCFLAGS) $(SRC)dropboxServer.c
+
+dropboxClient.o:
+	$(CC) $(CCFLAGS) $(SRC)dropboxClient.c
+
+# dropboxServer.o: dropboxUtil.o
+# 	$(CC) $(CCFLAGS) dropboxServer.o dropboxUtil.o -o dropboxServer
+
+# dropboxClient.o: dropboxUtil.o
+# 	$(CC) $(CCFLAGS) dropboxClient.o dropboxUtil.o -o dropboxClient
+
+# dropboxUtil.o:
+# 	$(CC) $(CCFLAGS) dropboxUtil.o
 
 clean:
 	find . -type f ! -name "*.c" ! -name "*.h" ! -name "Makefile" ! -name "*.pdf" ! -name "*.tex" ! -name "*.png" -delete

@@ -9,19 +9,23 @@
 //*
 //*
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <dropboxServer.h>
+#include "dropboxServer.h"
+
+#define PORT 4000
+#define MAXNAME 256
 
 struct client
 {
   int devices[2]; // associado aos dispositivos do usuário userid[MAXNAME]
   char userid[MAXNAME]; // id do usuário no servidor, que deverá ser único. Informado pela linha de comando.
-  struct file_info[MAXFILES]; // metadados de cada arquivo que o cliente possui no servidor.
+  struct file_info; // metadados de cada arquivo que o cliente possui no servidor.
   int logged_in; // cliente está logado ou não.
 };
 
@@ -34,7 +38,6 @@ struct file_info
 };
 
 
-#define PORT 4000
 
 int main(int argc, char *argv[])
 {
