@@ -45,7 +45,6 @@ struct file_info
 };
 
 
-
 int main(int argc, char *argv[])
 {
   int sockfd; // socket file descriptor
@@ -54,6 +53,12 @@ int main(int argc, char *argv[])
   socklen_t clilen;
   struct sockaddr_in serv_addr, cli_addr;
   char buffer[256];
+
+  if (argc < 1)
+  {
+    fprintf(stderr,"[client]: usage %s <ip>\n", argv[0]);
+    exit(0);
+  }
 
   if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
   {
@@ -69,13 +74,13 @@ int main(int argc, char *argv[])
     }
 
   serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(4000); // random unused port
-  serv_addr.sin_addr.s_addr = inet_addr("127.0.0.0"); // gets current ip
+  serv_addr.sin_port = htons(7610); // random unused port
+  serv_addr.sin_addr.s_addr = inet_addr(argv[1]); // gets current ip
   bzero(&(serv_addr.sin_zero), 8);
 
   if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
   {
-    printf("[server]: ERROR on binding\n");
+    printf("[server]: ERROR on binding \"%s\"\n", inet_ntoa(serv_addr.sin_addr));
     perror("[server]: bind");
     exit(1);
   }
@@ -150,6 +155,11 @@ void receive_file(char *file)
 //* Envia o arquivo file para o usuário.
 //* Deverá ser executada quando for realizar download de um arquivo. file – filename.ext
 void send_file(char *file)
+{
+
+}
+
+int server_init()
 {
 
 }
