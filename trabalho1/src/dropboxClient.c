@@ -23,7 +23,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
-
 #include "./dropboxServer.h"
 
 int sockfd, n; // socket file descriptor
@@ -51,7 +50,7 @@ int main(int argc, char *argv[])
 
   while(1)
   {
-    printf("[client]: message to send: ");
+    printf("[client-comando]:~> ");
     bzero(buffer, 256);
     fgets(buffer, 256, stdin);
 

@@ -10,7 +10,6 @@
 //* chamada: ./dropboxServer ip port
 //*
 
-
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -24,7 +23,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
-
 #include "dropboxServer.h"
 
 #define MAXNAME 256
