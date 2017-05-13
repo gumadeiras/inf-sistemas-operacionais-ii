@@ -53,13 +53,15 @@ int main(int argc, char *argv[])
   socklen_t clilen;
   struct sockaddr_in serv_addr, cli_addr;
   char buffer[256];
+  int PORT = atoi(argv[2]);
 
-  if (argc < 1)
+  if (argc != 3)
   {
-    fprintf(stderr,"[client]: usage %s <ip>\n", argv[0]);
+    fprintf(stderr,"[server]: usage %s <ip> <port>\n", argv[0]);
     exit(0);
   }
 
+  printf("[server]: atempting to create: \"%s:%s\"\n", argv[1], argv[2]);
   if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
   {
     printf("[server]: ERROR opening socket\n");
@@ -74,13 +76,13 @@ int main(int argc, char *argv[])
     }
 
   serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(7610); // random unused port
-  serv_addr.sin_addr.s_addr = inet_addr(argv[1]); // gets current ip
+  serv_addr.sin_port = htons(PORT);
+  serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
   bzero(&(serv_addr.sin_zero), 8);
 
   if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
   {
-    printf("[server]: ERROR on binding \"%s\"\n", inet_ntoa(serv_addr.sin_addr));
+    printf("[server]: ERROR on binding \"%s:%d\"\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
     perror("[server]: bind");
     exit(1);
   }
@@ -93,46 +95,52 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  clilen = sizeof(struct sockaddr_in);
-  if ((newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen)) == -1)
+  printf("listening...\n");
+
+  while(1)
   {
-    printf("[server]: ERROR on accept\n");
-    perror("[server]: accept");
-    exit(1);
+
+    clilen = sizeof(struct sockaddr_in);
+    if ((newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen)) == -1)
+    {
+      printf("[server]: ERROR on accept\n");
+      perror("[server]: accept");
+      exit(1);
+    }
+
+
+    printf("[server]: incoming connection from %s\n", inet_ntoa(cli_addr.sin_addr));
+
+    bzero(buffer, 256);
+
+    // int getpeername(int sockfd, struct sockaddr *addr, int *addrlen);
+    // int gethostname(char *hostname, size_t size);
+
+    // https://www.gta.ufrj.br/ensino/eel878/sockets/clientserver.html
+    // if (!fork()) { // this is the child process
+    //           close(sockfd); // child doesn't need the listener
+    //           if (send(new_fd, "Hello, world!\n", 14, 0) == -1)
+    //               perror("send");
+    //           close(new_fd);
+    //           exit(0);
+    //       }
+    // close(new_fd); // parent doesn't need this
+
+
+    /* read from the socket */
+    n = read(newsockfd, buffer, 256);
+    if (n < 0)
+      printf("[server]: ERROR reading from socket\n");
+    if (n == 0)
+      printf("[server]: ERROR reading from socket: connection closed by client\n");
+
+    printf("[server]: message received: %s\n", buffer);
+
+    /* write in the socket */
+    n = write(newsockfd,"[server]: I got your message\n", 18);
+    if (n < 0)
+      printf("[server]: ERROR writing to socket\n");
   }
-
-
-  printf("[server]: incoming connection from %s\n", inet_ntoa(cli_addr.sin_addr));
-
-  bzero(buffer, 256);
-
-  // int getpeername(int sockfd, struct sockaddr *addr, int *addrlen);
-  // int gethostname(char *hostname, size_t size);
-
-  // https://www.gta.ufrj.br/ensino/eel878/sockets/clientserver.html
-  // if (!fork()) { // this is the child process
-  //           close(sockfd); // child doesn't need the listener
-  //           if (send(new_fd, "Hello, world!\n", 14, 0) == -1)
-  //               perror("send");
-  //           close(new_fd);
-  //           exit(0);
-  //       }
-  // close(new_fd); // parent doesn't need this
-
-
-  /* read from the socket */
-  n = read(newsockfd, buffer, 256);
-  if (n < 0)
-    printf("[server]: ERROR reading from socket\n");
-  if (n == 0)
-    printf("[server]: ERROR reading from socket: connection closed by client\n");
-
-  printf("[server]: message received: %s\n", buffer);
-
-  /* write in the socket */
-  n = write(newsockfd,"[server]: I got your message\n", 18);
-  if (n < 0)
-    printf("[server]: ERROR writing to socket\n");
 
   close(newsockfd);
   close(sockfd);

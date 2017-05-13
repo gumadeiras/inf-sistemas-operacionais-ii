@@ -26,14 +26,13 @@
 
 #include "./dropboxServer.h"
 
-#define PORT 4000
-
 int main(int argc, char *argv[])
 {
   int sockfd, n; // socket file descriptor
   struct sockaddr_in serv_addr; // server address information
   struct hostent *server;
   char buffer[256];
+  int PORT = atoi(argv[3]);
 
   if (argc < 4)
   {
@@ -41,6 +40,7 @@ int main(int argc, char *argv[])
     exit(0);
   }
 
+  printf("[client]: atempting to connect: \"%s@%s:%s\"\n", argv[1], argv[2], argv[3]);
   // server = gethostbyname(argv[2]);
   // if (server == NULL)
   // {
@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
 
   if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
   {
-    printf("[client]: ERROR connecting\n");
+    printf("[client]: ERROR connecting\"%s:%d\"\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
     perror("[client]: connect");
     exit(1);
   }
