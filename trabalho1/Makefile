@@ -10,17 +10,17 @@ SRC=./src/
 DIRS=$(SRC)
 
 CC=gcc
-CCFLAGS=-c -lm -m32 -Wall
+CCFLAGS=-c -lm
 
 all: main
 
 main: dropboxServer dropboxClient
 
 dropboxServer: dropboxServer.o
-	$(CC) $(CCFLAGS) dropboxServer.o -o dropboxServer
+	$(CC) dropboxServer.o -o dropboxServer
 
 dropboxClient: dropboxClient.o
-	$(CC) $(CCFLAGS) dropboxClient.o -o dropboxClient
+	$(CC) dropboxClient.o -o dropboxClient
 
 dropboxServer.o:
 	$(CC) $(CCFLAGS) $(SRC)dropboxServer.c

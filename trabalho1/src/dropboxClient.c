@@ -10,63 +10,90 @@
 //* chamada: ./dropboxClient fulano endereço porta
 //*
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/sendfile.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
+
 #include "./dropboxServer.h"
 
 #define PORT 4000
 
 int main(int argc, char *argv[])
 {
-  int sockfd, n;
-  struct sockaddr_in serv_addr;
+  int sockfd, n; // socket file descriptor
+  struct sockaddr_in serv_addr; // server address information
   struct hostent *server;
-
   char buffer[256];
+
   if (argc < 4)
   {
-    fprintf(stderr,"usage %s username ip port\n", argv[0]);
+    fprintf(stderr,"[client]: usage %s <username> <ip> <port>\n", argv[0]);
     exit(0);
   }
 
-  server = gethostbyname(argv[2]);
-  if (server == NULL)
+  // server = gethostbyname(argv[2]);
+  // if (server == NULL)
+  // {
+  //   fprintf(stderr,"[client]: ERROR, no such host\n");
+  //   exit(0);
+  // }
+
+  if ((server = gethostbyname(argv[2])) == NULL) {  // get the server info
+        fprintf(stderr,"[client]: ERROR, no such host\n");
+        perror("[client]: gethostbyname");
+        exit(1);
+  }
+
+  if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
   {
-    fprintf(stderr,"ERROR, no such host\n");
-    exit(0);
+    printf("[client]: ERROR opening socket\n");
+    perror("[client]:socket");
+    exit(1);
   }
-
-  if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    printf("ERROR opening socket\n");
 
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_port = htons(PORT);
   serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
   bzero(&(serv_addr.sin_zero), 8);
 
-  if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0)
-    printf("ERROR connecting\n");
+  if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+  {
+    printf("[client]: ERROR connecting\n");
+    perror("[client]: connect");
+    exit(1);
+  }
 
-  printf("Enter the message: ");
+  printf("[client]: message to send: ");
   bzero(buffer, 256);
   fgets(buffer, 256, stdin);
 
   /* write in the socket */
-  n = write(sockfd, buffer, strlen(buffer));
-  if (n < 0)
-    printf("ERROR writing to socket\n");
+  if ((n = write(sockfd, buffer, strlen(buffer))) == -1)
+  {
+    printf("[client]: ERROR writing to socket\n");
+    perror("[client]: write");
+    exit(1);
+  }
 
   bzero(buffer,256);
 
   /* read from the socket */
-  n = read(sockfd, buffer, 256);
-  if (n < 0)
-    printf("ERROR reading from socket\n");
+  if ((n = read(sockfd, buffer, 256)) == -1)
+  {
+    printf("[client]: ERROR reading from socket\n");
+    perror("[client]: read");
+    exit(1);
+  }
 
   printf("%s\n", buffer);
 
