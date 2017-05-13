@@ -7,7 +7,7 @@
 //* dropboxClient.c
 //* implementação das funções do cliente
 //*
-//* chamada: ./dropboxClient fulano endereço porta
+//* chamada: ./dropboxClient user ip port
 //*
 
 #include <unistd.h>

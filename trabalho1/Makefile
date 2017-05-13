@@ -10,7 +10,7 @@ SRC=./src/
 DIRS=$(SRC)
 
 CC=gcc
-CCFLAGS=-c -lm
+CCFLAGS=-c -lm -DEBUG
 
 all: main
 

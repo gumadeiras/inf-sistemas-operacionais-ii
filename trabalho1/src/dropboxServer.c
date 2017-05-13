@@ -7,6 +7,7 @@
 //* dropboxServer.c
 //* implementação das funções do servidor
 //*
+//* chamada: ./dropboxServer ip port
 //*
 
 
@@ -44,16 +45,17 @@ struct file_info
   int size; // indica o tamanho do arquivo, em bytes.
 };
 
+// server information
+int sockfd, PORT;
+struct sockaddr_in serv_addr;
 
 int main(int argc, char *argv[])
 {
-  int sockfd; // socket file descriptor
   int newsockfd; // new socket on accept() return; pthreads para gerenciar várias conexões?
   int n;
+  struct sockaddr_in cli_addr;
   socklen_t clilen;
-  struct sockaddr_in serv_addr, cli_addr;
   char buffer[256];
-  int PORT = atoi(argv[2]);
 
   if (argc != 3)
   {
@@ -61,41 +63,12 @@ int main(int argc, char *argv[])
     exit(0);
   }
 
-  printf("[server]: atempting to create: \"%s:%s\"\n", argv[1], argv[2]);
-  if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
-  {
-    printf("[server]: ERROR opening socket\n");
-    perror("[server]: socket");
-    exit(1);
-  }
+  printf("[server]: atempting to create socket: \"%s:%s\"\n", argv[1], argv[2]);
 
-  int yes = 1;
-  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-        perror("setsockopt");
-        exit(1);
-    }
+  server_init(argv[1], argv[2]);
 
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(PORT);
-  serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
-  bzero(&(serv_addr.sin_zero), 8);
-
-  if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-  {
-    printf("[server]: ERROR on binding \"%s:%d\"\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
-    perror("[server]: bind");
-    exit(1);
-  }
-
-  printf("Server is up and running!\nip: %s\nport: %d\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
-
-  if (listen(sockfd, 5) == -1)
-  {
-    perror("[server]: listen");
-    exit(1);
-  }
-
-  printf("listening...\n");
+  printf("[server]: server is up and running!\n");
+  printf("[server]: listening on %s:%d\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
 
   while(1)
   {
@@ -167,7 +140,47 @@ void send_file(char *file)
 
 }
 
-int server_init()
+int server_init(char *s_ip, char *s_port)
 {
+  PORT = atoi(s_port);
 
+  #ifdef DEBUG
+  PRINTF("%s %s \n", s_ip, s_port);
+  #endif
+
+  if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
+  {
+    printf("[server]: ERROR opening socket\n");
+    perror("[server]: socket");
+    exit(1);
+  }
+
+  int yes = 1;
+  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
+  {
+    perror("[server]: setsockopt");
+    exit(1);
+  }
+
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_port = htons(PORT);
+  serv_addr.sin_addr.s_addr = inet_addr(s_ip);
+  bzero(&(serv_addr.sin_zero), 8);
+
+  #ifdef DEBUG
+  PRINTF("%d\n", ntohs(serv_addr.sin_port));
+  #endif
+
+  if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+  {
+    printf("[server]: ERROR on binding \"%s:%d\"\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
+    perror("[server]: bind");
+    exit(1);
+  }
+
+  if (listen(sockfd, 5) == -1)
+  {
+    perror("[server]: listen");
+    exit(1);
+  }
 }
