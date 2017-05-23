@@ -34,6 +34,8 @@ int main(int argc, char *argv[])
   char buffer[256];
   int PORT = atoi(argv[3]);
 
+
+  // verifica que os parâmetros usuario, ip e porta foram passados
   if (argc < 4)
   {
     fprintf(stderr,"[client]: usage %s <username> <ip> <port>\n", argv[0]);
@@ -42,10 +44,12 @@ int main(int argc, char *argv[])
 
   printf("[client]: atempting to connect: \"%s@%s:%s\"\n", argv[1], argv[2], argv[3]);
 
+  // chama função que cuida da conexão com o servidor
   connect_server(argv[2], PORT);
 
   printf("[client]: connected to server: \"%s@%s:%d\"\n", argv[1], inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
 
+  // chama função para verificar qual usuário está se conectando ao servidor
   verify_user_client(argv[1]);
 
   while(1)
@@ -84,12 +88,15 @@ int main(int argc, char *argv[])
 //* port – porta aguardando conexão
 int connect_server(char *host, int port)
 {
+
+  // função gethostbyname procura algum servidor no ip fornecido
   if ((server = gethostbyname(host)) == NULL) {  // get the server info
         fprintf(stderr,"[client]: ERROR, no such host\n");
         perror("[client]: gethostbyname");
         exit(1);
   }
 
+  // socket() abre o socket para se conectar ao servidor
   if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
   {
     printf("[client]: ERROR opening socket\n");
@@ -102,6 +109,7 @@ int connect_server(char *host, int port)
   serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
   bzero(&(serv_addr.sin_zero), 8);
 
+  // função connect() realiza a conexão em si com o servidor
   if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
   {
     printf("[client]: ERROR connecting\"%s:%d\"\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));

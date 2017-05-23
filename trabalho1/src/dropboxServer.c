@@ -55,6 +55,8 @@ int main(int argc, char *argv[])
   struct sockaddr_in cli_addr;
   socklen_t clilen;
 
+
+  // verifica que os parâmetros ip e porta foram passados na inicialização do servidor
   if (argc != 3)
   {
     fprintf(stderr,"[server]: usage %s <ip> <port>\n", argv[0]);
@@ -63,6 +65,7 @@ int main(int argc, char *argv[])
 
   printf("[server]: atempting to create socket: \"%s:%s\"\n", argv[1], argv[2]);
 
+  // chama função que vai fazer a inicialização do servidor
   if ((server_init(argv[1], argv[2])) != 0)
     printf("[server]: ERROR server_init failed\n");
 
@@ -149,6 +152,9 @@ void send_file(char *file)
 
 }
 
+
+//* função que cuida da inicialização do servidor
+//* create socket -> bind -> listen
 int server_init(char *s_ip, char *s_port)
 {
   PORT = atoi(s_port);
@@ -157,6 +163,7 @@ int server_init(char *s_ip, char *s_port)
   PRINTF("%s %s \n", s_ip, s_port);
   #endif
 
+  // função que cria o socket
   if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
   {
     printf("[server]: ERROR opening socket\n");
@@ -164,6 +171,7 @@ int server_init(char *s_ip, char *s_port)
     exit(1);
   }
 
+  // função para evitar erros caso a porta já esteja sendo usada
   int yes = 1;
   if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
   {
@@ -180,6 +188,7 @@ int server_init(char *s_ip, char *s_port)
   PRINTF("%d\n", ntohs(serv_addr.sin_port));
   #endif
 
+  // faz o bind o socket na porta
   if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
   {
     printf("[server]: ERROR on binding \"%s:%d\"\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
@@ -187,6 +196,7 @@ int server_init(char *s_ip, char *s_port)
     exit(1);
   }
 
+  // socket agora está "ouvindo", esperando alguém se conectar
   if (listen(sockfd, 5) == -1)
   {
     perror("[server]: listen");
@@ -199,6 +209,7 @@ int server_init(char *s_ip, char *s_port)
 
 int verify_user_server()
 {
+  // implementar de forma a usar a struct client
   printf("[server]: new user connecting: %s\n", buffer);
   return 0;
 }
