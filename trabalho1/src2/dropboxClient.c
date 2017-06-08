@@ -31,7 +31,7 @@ void turnStringLowercase(char* string)
 
 int get_command_from_buffer(const char* string)
 {
-	char* copy = strdup(string);
+    char* copy = strdup(string);
     char* firstString;
     int command = CMD_ERROR;
 
@@ -56,76 +56,76 @@ int get_command_from_buffer(const char* string)
 
 int process_upload(const int sockfd, const char* buffer)
 {
-	// file vars
-	char* copy;
-	char* command;
-	char* path;
-	char* filename;
-	char filesize[50];
-	int ret_r;
-	FILE *file_s;
+    // file vars
+    char* copy;
+    char* command;
+    char* path;
+    char* filename;
+    char filesize[50];
+    int ret_r;
+    FILE *file_s;
     char fbuffer[BUFFER_SIZE];
     int remain_data = 0;
     struct stat file_stat;
 
-	copy = strdup(buffer);
-	command = strtok(copy, " ");
-	path =  strtok(NULL, " ");
+    copy = strdup(buffer);
+    command = strtok(copy, " ");
+    path =  strtok(NULL, " ");
 
-	//path = malloc(200);
-	//memset(path, 0 ,200);
-	//strcpy(path, "/home/mauricio/Desktop/dog.jpg");
+    //path = malloc(200);
+    //memset(path, 0 ,200);
+    //strcpy(path, "/home/mauricio/Desktop/dog.jpg");
 
-	filename = basename(path);
-	memset(fbuffer, 0, BUFFER_SIZE);
+    filename = basename(path);
+    memset(fbuffer, 0, BUFFER_SIZE);
 
-	file_s = fopen (path, "r");
-	if (file_s == NULL) {
-		printf("Nao pode abrir arquivo\n");
-		printf("Error is: %s (errno=%d)\n", strerror(errno), errno);
-		return -1;
+    file_s = fopen (path, "r");
+    if (file_s == NULL) {
+        printf("Nao pode abrir arquivo\n");
+        printf("Error is: %s (errno=%d)\n", strerror(errno), errno);
+        return -1;
     }
 
-	/*
+    /*
     if (fstat(file_s, &file_stat) < 0)
     {
-    	printf("Nao pode ler stat arquivo\n");
-		printf("Error is: %s (errno=%d)\n", strerror( errno ), errno );
-		break;
+        printf("Nao pode ler stat arquivo\n");
+        printf("Error is: %s (errno=%d)\n", strerror( errno ), errno );
+        break;
     }
     remain_data = file_stat.st_size;
     */
 
     fseek(file_s, 0L, SEEK_END);
-	remain_data = ftell(file_s);
-	rewind(file_s);
+    remain_data = ftell(file_s);
+    rewind(file_s);
 
     sprintf(filesize, "%d", remain_data);
 
     memset(buffer, 0, BUFFER_SIZE);
-	strcpy(buffer, "upload");
-	strcat(buffer," ");
-	strcat(buffer, filename);
-	strcat(buffer," ");
-	strcat(buffer, filesize);
+    strcpy(buffer, "upload");
+    strcat(buffer," ");
+    strcat(buffer, filename);
+    strcat(buffer," ");
+    strcat(buffer, filesize);
 
-	send(sockfd, buffer, BUFFER_SIZE, NULL);
+    send(sockfd, buffer, BUFFER_SIZE, NULL);
 
-	while (remain_data > 0 && (ret_r = fread(&fbuffer, 1, BUFFER_SIZE, file_s)) > 0)
-	{
-		int sx = send(sockfd, fbuffer, ret_r, NULL);
-		remain_data -= sx;
-		printf("File: [%d/%d - %d]\n", remain_data, atoi(filesize), sx);
-	}
+    while (remain_data > 0 && (ret_r = fread(&fbuffer, 1, BUFFER_SIZE, file_s)) > 0)
+    {
+        int sx = send(sockfd, fbuffer, ret_r, NULL);
+        remain_data -= sx;
+        printf("File: [%d/%d - %d]\n", remain_data, atoi(filesize), sx);
+    }
 
     fclose(file_s);
-    
-	free(copy);
+
+    free(copy);
 }
 
 int fill_buffer_with_command(char* buffer, int size)
 {
-    printf("\nDigite o comando:\n> ");
+    printf("\n[client-command]:~> ");
 
     memset(buffer, 0, BUFFER_SIZE);
 
@@ -133,21 +133,21 @@ int fill_buffer_with_command(char* buffer, int size)
 
     if(gets_r == NULL)
     {
-    	return -1;
+        return -1;
     }
 
     if(strlen(buffer) < 2)
     {
-    	return -1;
+        return -1;
     }
 
     if (strlen(buffer) > 1)
     {
-    	buffer[strlen(buffer)-1] = '\0';
-    } 
+        buffer[strlen(buffer)-1] = '\0';
+    }
     else
     {
-    	buffer[0] = '\0';
+        buffer[0] = '\0';
     }
 
     printf("Your command: [%s]\n", buffer);
@@ -156,7 +156,7 @@ int fill_buffer_with_command(char* buffer, int size)
 int main()
 {
     // Declara
-	int sockfd;
+    int sockfd;
     struct sockaddr_in serveraddr;
     char buffer[BUFFER_SIZE];
     char username[USERNAME_SIZE];
@@ -173,12 +173,12 @@ int main()
         return 1;
     }
     printf("Socket criado\n");
-     
+
     // Configura
     serveraddr.sin_family = AF_INET;
     serveraddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serveraddr.sin_port = htons(SERVER_PORT);
- 
+
     // Conecta
     if (connect(sockfd , (struct sockaddr *) &serveraddr , sizeof(serveraddr)) < 0)
     {
@@ -187,10 +187,10 @@ int main()
     }
     printf("Conectado\n");
 
-	// Envia HI
+    // Envia HI
     memset(buffer, 0, BUFFER_SIZE);
-	strcpy(buffer, "HI");
-	if(send(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
+    strcpy(buffer, "HI");
+    if(send(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
     {
         printf("Hi sent failed\n");
         return 1;
@@ -235,64 +235,65 @@ int main()
     // Start the loop
     while(1)
     {
-    	if(fill_buffer_with_command(buffer, BUFFER_SIZE) < 0)
-    	{
-    		continue;
-    	}
-
-       	switch(get_command_from_buffer(buffer))
+        printf("----- menu\nupload </file/path>\ndownload <file>\nsync_up\nsync_down\nexit\n");
+        if(fill_buffer_with_command(buffer, BUFFER_SIZE) < 0)
         {
-        	    case CMD_EXIT:
-        	    	close(sockfd);
-            		return 0;
-            	break;
+            continue;
+        }
 
-            	case CMD_UPLOAD:
-            		if(process_upload(sockfd, buffer) < 0)
-            		{
-            			printf("Upload failed.\n");
-            			return -1;
-            		} else {
-            			printf("Upload done.\n");
-            		}
+        switch(get_command_from_buffer(buffer))
+        {
+                case CMD_EXIT:
+                    close(sockfd);
+                    return 0;
+                break;
 
-            	break;
+                case CMD_UPLOAD:
+                    if(process_upload(sockfd, buffer) < 0)
+                    {
+                        printf("Upload failed.\n");
+                        return -1;
+                    } else {
+                        printf("Upload done.\n");
+                    }
 
-            	case CMD_DOWNLOAD:
-            		// todo: baixa o arquivo arg1 do servidor e salva no diretorio do path arg2
+                break;
 
-            	break;
+                case CMD_DOWNLOAD:
+                    // todo: baixa o arquivo arg1 do servidor e salva no diretorio do path arg2
 
-            	case CMD_SYNC:
-                    // todo: 
+                break;
 
-            	break;
+                case CMD_SYNC:
+                    // todo:
 
-            	default:
+                break;
 
-            		// Envia
-		        	if(send(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
-			        {
-			            printf("Send command failed\n");
-			            return 1;
-			        }
-			        printf("Command [%s] enviado.\n", buffer);
+                default:
 
-			        // Recebe
-			        memset(buffer, 0, BUFFER_SIZE);
-			        if( recv(sockfd, buffer, BUFFER_SIZE, 0) < 0)
-			        {
-			            printf("Recv failed\n");
-			            return 1;
-			        }
-			        printf("Server respondeu: [%s]\n", buffer);
-                    
-            	break;
+                    // Envia
+                    if(send(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
+                    {
+                        printf("Send command failed\n");
+                        return 1;
+                    }
+                    printf("Command [%s] enviado.\n", buffer);
+
+                    // Recebe
+                    memset(buffer, 0, BUFFER_SIZE);
+                    if( recv(sockfd, buffer, BUFFER_SIZE, 0) < 0)
+                    {
+                        printf("Recv failed\n");
+                        return 1;
+                    }
+                    printf("Server respondeu: [%s]\n", buffer);
+
+                break;
         }
 
     }
-     
+
     close(sockfd);
 
-	return 0;
+    return 0;
 }
