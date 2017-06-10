@@ -128,7 +128,65 @@ void sync_client()
 void send_file(char *file)
 {
 
+
+/* 
+fopen function: 
+
+FILE *fopen(const char *filename, const char *mode)
+
+filename − This is the C string containing the name of the file to be opened.
+mode − This is the C string containing a file access mode.
+
+"r"	Opens a file for reading. The file must exist.
+"w"	Creates an empty file for writing. If a file with the same name already exists, its content is erased and the file is considered as a new empty file.
+"a"	Appends to a file. Writing operations, append data at the end of the file. The file is created if it does not exist.
+"r+"	Opens a file to update both reading and writing. The file must exist.
+"w+"	Creates an empty file for both reading and writing.
+"a+"	Opens a file for reading and appending.
+*/
+
+/* Opening the file the user wants to send */
+  FILE *fp = fopen(*file, r);
+  if(fp==null)
+  {
+    printf("Opening file error");
+    return 1;
+  }
+
+  /* 
+  Is this correct? We need to know the size of the file opened to read it properly. 
+  I dont know if the right reference is fp, *fp or something else. 
+  */
+  size_t bytesToWrite = sizeof(fp);
+  size_t bytesWritten = 0;
+
+  while (bytesWritten != bytesToWrite)
+  {
+      size_t writtenThisTime;
+
+      do
+      {
+        writtenThisTime = write(sockfd, buffer + bytesWritten, (bytesToWrite - bytesWritten));
+      }
+      while(writtenThisTime == -1) && (errno == EINTR));
+
+      if(writtenThisTime == -1)
+      {
+          /* Real error. Do something appropriate */
+          return;
+      }
+      bytesWritten += writtenThisTime;
+  }
+
+/*
+ Please keep in mind that this needs review from every possible angle.
+ IMPORTANT: THIS WAS NOT TESTED. I do not have any Linux machine/virtual machine avaible at the moment.
+*/
+
+
+
 }
+
 
 //* Obtém um arquivo file do servidor.
 //* Deverá ser executada quando for realizar download de um arquivo.
