@@ -21,7 +21,7 @@
 
 #define BUFFER_SIZE 1024
 #define USERNAME_SIZE 100
-#define SERVER_PORT 3003
+#define SERVER_PORT 3002
 
 #define CMD_ERROR -1
 #define CMD_UPLOAD 1

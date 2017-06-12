@@ -23,7 +23,7 @@
 
 // Server config
 #define LISTEN_IP "127.0.0.1"
-#define LISTEN_PORT 3003
+#define LISTEN_PORT 3002
 #define ROOT_PATH "/home/gustavo/Desktop/server/"
 #define NUM_MAX_CLIENT 10
 
@@ -259,6 +259,7 @@ int process_username(const int sockfd, const char* buffer, int id)
     // Acha um client_id valido
     int i = 0;
     int connections = 0;
+    pthread_mutex_lock(&lock);
     for (i = 0; i < NUM_MAX_CLIENT; ++i)
     {
         int cmp = strcmp(client_info_array[i].username, username);
@@ -272,10 +273,12 @@ int process_username(const int sockfd, const char* buffer, int id)
     {
         memset(message, 0, BUFFER_SIZE);
         strcpy(message, "NOTOK");
+        closeClient(id);
         write(sockfd, message, BUFFER_SIZE);
 
         return;
     }
+    pthread_mutex_unlock(&lock);
 
     int client_id = findSlotId();
     if(client_id == -1)
@@ -283,6 +286,7 @@ int process_username(const int sockfd, const char* buffer, int id)
         printf("[server] i am full!\n");
         memset(message, 0, BUFFER_SIZE);
         strcpy(message, "SERVER");
+        closeClient(id);
         write(sockfd, message, BUFFER_SIZE);
         return;
     }
