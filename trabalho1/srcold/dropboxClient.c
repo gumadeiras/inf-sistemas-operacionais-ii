@@ -1,157 +1,560 @@
-//*
-//* Trabalho 1
-//* Instituto de Informática - UFRGS
-//* Sistemas Operacionais II N - 2017/1
-//* Prof. Dr. Alberto Egon Schaeffer Filho
-//*
-//* dropboxClient.c
-//* implementação das funções do cliente
-//*
-//* chamada: ./dropboxClient user ip port
-//*
-
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <sys/sendfile.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <errno.h>
 #include <sys/stat.h>
-#include <netinet/in.h>
-#include "./dropboxServer.h"
+#include <linux/inotify.h>
 
-int sockfd, n; // socket file descriptor
-struct sockaddr_in serv_addr; // server address information
-struct hostent *server;
+#define BUFFER_SIZE 1024
+#define USERNAME_SIZE 100
+#define SERVER_PORT 3002
 
-int main(int argc, char *argv[])
+#define CMD_ERROR -1
+#define CMD_UPLOAD 1
+#define CMD_EXIT 2
+#define CMD_DOWNLOAD 3
+#define CMD_SYNC 4
+
+#define EVENT_SIZE  ( sizeof (struct inotify_event) )
+#define EVENT_BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
+
+char toLowercase(char ch)
 {
-  char buffer[256];
-  int PORT = atoi(argv[3]);
+    return (ch >= 'A' && ch <= 'Z') ? (ch + 32) : (ch);
+}
 
-
-  // verifica que os parâmetros usuario, ip e porta foram passados
-  if (argc < 4)
-  {
-    fprintf(stderr,"[client]: usage %s <username> <ip> <port>\n", argv[0]);
-    exit(0);
-  }
-
-  printf("[client]: atempting to connect: \"%s@%s:%s\"\n", argv[1], argv[2], argv[3]);
-
-  // chama função que cuida da conexão com o servidor
-  connect_server(argv[2], PORT);
-
-  printf("[client]: connected to server: \"%s@%s:%d\"\n", argv[1], inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
-
-  // chama função para verificar qual usuário está se conectando ao servidor
-  verify_user_client(argv[1]);
-
-  while(1)
-  {
-    printf("[client-comando]:~> ");
-    bzero(buffer, 256);
-    fgets(buffer, 256, stdin);
-
-    /* write in the socket */
-    if ((n = write(sockfd, buffer, strlen(buffer))) == -1)
+void turnStringLowercase(char* string)
+{
+    for(int index=0; string[index]; index++)
     {
-      printf("[client]: ERROR writing to socket\n");
-      perror("[client]: write");
-      exit(1);
+        string[index] = toLowercase(string[index]);
+    }
+}
+
+int get_command_from_buffer(const char* string)
+{
+    char* copy = strdup(string);
+    char* firstString;
+    int command = CMD_ERROR;
+
+    firstString = strtok(copy, " ");
+
+    turnStringLowercase(firstString);
+
+    if (strcmp(firstString, "upload") == 0)
+    {
+        command = CMD_UPLOAD;
     }
 
-    bzero(buffer,256);
-
-    /* read from the socket */
-    if ((n = read(sockfd, buffer, 256)) == -1)
+    if (strcmp(firstString, "download") == 0)
     {
-      printf("[client]: ERROR reading from socket\n");
-      perror("[client]: read");
-      exit(1);
+        command = CMD_DOWNLOAD;
     }
 
-    printf("%s\n", buffer);
-  }
-
-  close(sockfd);
-  return 0;
-}
-
-//* Conecta o cliente com o servidor.
-//* host – endereço do servidor
-//* port – porta aguardando conexão
-int connect_server(char *host, int port)
-{
-
-  // função gethostbyname procura algum servidor no ip fornecido
-  if ((server = gethostbyname(host)) == NULL) {  // get the server info
-        fprintf(stderr,"[client]: ERROR, no such host\n");
-        perror("[client]: gethostbyname");
-        exit(1);
-  }
-
-  // socket() abre o socket para se conectar ao servidor
-  if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) == -1)
-  {
-    printf("[client]: ERROR opening socket\n");
-    perror("[client]:socket");
-    exit(1);
-  }
-
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(port);
-  serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
-  bzero(&(serv_addr.sin_zero), 8);
-
-  // função connect() realiza a conexão em si com o servidor
-  if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-  {
-    printf("[client]: ERROR connecting\"%s:%d\"\n", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
-    perror("[client]: connect");
-    exit(1);
-  }
-}
-
-//* Sincroniza o diretório “sync_dir_<nomeusuário>” com o servidor.
-void sync_client()
-{
-
-}
-
-//* Envia um arquivo file para o servidor. Deverá ser executada quando for realizar upload de um arquivo. file – path/filename.ext do arquivo a ser enviado
-void send_file(char *file)
-{
-
-}
-
-//* Obtém um arquivo file do servidor.
-//* Deverá ser executada quando for realizar download de um arquivo.
-//* file –filename.ext
-void get_file(char *file)
-{
-
-}
-
-//* Fecha a conexão com o servidor.
-void close_connection()
-{
-
-}
-
-int verify_user_client(char *username)
-{
-  n = write(sockfd, username, 18);
-    if (n < 0)
+    if (strcmp(firstString, "exit") == 0)
     {
-      printf("[client]: ERROR writing username to socket\n");
-      return -1;
+        command = CMD_EXIT;
     }
 
-  return 0;
+    free(copy);
+
+    return command;
+}
+
+// void send_file(char *file);
+int process_upload(const int sockfd, const char* buffer)
+{
+    // Declara e Inicializa
+    char message[BUFFER_SIZE];
+
+    FILE* filefd;
+    int data_read = 0;
+    int remain_data = 0;
+
+    char* copy;
+    char* command;
+    char* filepath;
+    char* filename;
+
+    char filesize[50];
+
+    // Pega dados do comando que estao separados por um espaco
+    copy = strdup(buffer);
+    command = strdup(strtok(copy, " "));
+    filepath =  strdup(strtok(NULL, " "));
+
+    // Tenta abrir arquivo
+    filefd = fopen (filepath, "rb");
+    if (filefd == NULL) {
+        printf("[client] Nao pode abrir arquivo\n");
+        printf("[client] Error is: %s (errno=%d)\n", strerror(errno), errno);
+        return -1;
+    }
+
+    // Pega filename
+    filename = strdup(basename(filepath));
+
+    // Pega filesize
+    fseek(filefd, 0L, SEEK_END);
+    sprintf(filesize, "%d", ftell(filefd));
+    rewind(filefd);
+
+    // Monta comando
+    memset(message, 0, BUFFER_SIZE);
+    strcpy(message, "upload");
+    strcat(message," ");
+    strcat(message, filename);
+    strcat(message," ");
+    strcat(message, filesize);
+    // printf("[client] MONTA COMANDO: COMMAND: %s\n", command);
+    // printf("[client] MONTA COMANDO: FILENAME: %s\n", filename);
+    // printf("[client] MONTA COMANDO: FILESIZE: %s\n", filesize);
+
+    // Envia comando
+    // printf("[client] ENVIA COMANDO: %s\n", message);
+    send(sockfd, message, BUFFER_SIZE, NULL);
+
+    // Envia arquivo
+    remain_data = atoi(filesize);
+    while (remain_data > 0 && (data_read = fread(&message, 1, BUFFER_SIZE, filefd)) > 0)
+    {
+        int data_sent = send(sockfd, message, data_read, NULL);
+        remain_data -= data_sent;
+    }
+
+    // Limpa a sujeira
+    fclose(filefd);
+    free(copy);
+}
+
+ // void receive_file(char *file);
+int process_download(const int sockfd, const char* buffer, char* username)
+{
+    // Declara e Inicializa
+    char message[BUFFER_SIZE];
+
+    FILE* filefd;
+    int data_read = 0;
+    int remain_data = 0;
+
+    char* copy;
+    char* command;
+    char* filename;
+    char* filesize;
+
+    char* copy2;
+    char* command2;
+    char* filename2;
+
+    char* filepath;
+
+    // Pega dados do comando do usuario separados por espaco
+    copy = strdup(buffer);
+    command = strdup(strtok(copy, " "));
+    filename =  strdup(strtok(NULL, " "));
+
+    // Monta comando
+    memset(message, 0, BUFFER_SIZE);
+    strcpy(message, "download");
+    strcat(message," ");
+    strcat(message, filename);
+
+    // Envia comando
+    send(sockfd, message, BUFFER_SIZE, NULL);
+
+    // Espera resposta
+    memset(message, 0, BUFFER_SIZE);
+    recv(sockfd, message, BUFFER_SIZE, 0);
+
+    // Trata resposta
+    copy2 = strdup(message);
+    command2 = strdup(strtok(copy2, " "));
+    filename2 =  strdup(strtok(NULL, " "));
+    filesize =  strdup(strtok(NULL, " "));
+    remain_data = atoi(filesize);
+
+    // Verifica erro
+    if (strcmp(command, "ERROR") == 0)
+    {
+        printf("[client] ERROR!\n");
+        printf("[client] %s\n", message);
+        return -1;
+    }
+
+    // Monta filepath
+    printf("%s\n", username);
+    filepath = malloc(BUFFER_SIZE);
+    memset(filepath, 0, BUFFER_SIZE);
+    strcat(filepath, "/home/gustavo/sync_dir_"); // diretorio raz
+    strcat(filepath, username);                  // concatena como nome do usuario
+    strcat(filepath, "/");
+    strcat(filepath, filename);                 // concatena com o nome do arquivo
+    printf("FILEPATH: %s\n", filepath);
+    printf("[client] filepath: %s\n", filepath);
+
+    // Cria arquivo
+    filefd = fopen (filepath, "wb");
+    if (filefd == NULL) {
+        printf("[client] ERROR!\n");
+        printf("[client] error: %d [%s]\n", errno, strerror(errno));
+        return -1;
+    }
+
+    // Recebe arquivo
+    memset(message, 0, BUFFER_SIZE);
+    while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, NULL)) > 0)
+    {
+        fwrite(&message, 1, data_read, filefd);
+        remain_data -= data_read;
+        printf("[client] RECV(): [%d/%d - %d]\n", remain_data, atoi(filesize), data_read);
+        memset(message, 0, BUFFER_SIZE);
+    }
+    printf("[client] transfer completed\n");
+
+    // Limpa a sujeira
+    fclose(filefd);
+    free(filepath);
+}
+
+int fill_buffer_with_command(char* buffer, int size)
+{
+    printf("\n\n\n-+-~-+--+-~-+--+-~-+--+-~-+--+-~-+--+-~-+--+-~-+--+-~-+-\n");
+    printf("\n[client] Menu:\n");
+    printf("[client] list\n");
+    printf("[client] upload <path>\n");
+    printf("[client] download <filename>\n");
+    printf("[client] get_sync_dir\n");
+    printf("[client] exit\n");
+    printf("[client]:~> ");
+
+    memset(buffer, 0, BUFFER_SIZE);
+
+    char* gets_r = fgets(buffer, BUFFER_SIZE, stdin);
+
+    if(gets_r == NULL)
+    {
+        return -1;
+    }
+
+    if(strlen(buffer) < 2)
+    {
+        return -1;
+    }
+
+    if (strlen(buffer) > 1)
+    {
+        buffer[strlen(buffer)-1] = '\0';
+    }
+    else
+    {
+        buffer[0] = '\0';
+    }
+
+    printf("[client] command: [%s]\n", buffer);
+}
+
+int process_sync_server()
+{
+    // deleta tudo no server
+
+    // envia tudo para server
+}
+
+int process_sync_client()
+{
+    // deleta tudo no client
+
+    // recebe tudo do server
+}
+
+
+
+int create_sync_inotify_home_folder()
+{
+    int length;
+    int i = 0;
+    int fd;
+    int wd;
+    char buffer[EVENT_BUF_LEN];
+
+    fd = inotify_init();
+    if ( fd < 0 ) {
+        printf("[client] inotify_init error: %d [%s]\n", errno, strerror(errno));
+    }
+
+    wd = inotify_add_watch(fd, "/home/mauricio/mauricioa", IN_CREATE | IN_DELETE | IN_MODIFY | IN_CLOSE_WRITE | IN_MOVED_FROM | IN_MOVED_TO );
+    if ( wd < 0 ) {
+        printf("[client] inotify_add_watch error: %d [%s]\n", errno, strerror(errno));
+    }
+
+    //blocking
+    length = read( fd, buffer, EVENT_BUF_LEN );
+    if ( length < 0 ) {
+        printf("[client] read error: %d [%s]\n", errno, strerror(errno));
+    }
+
+    for (; i < length;)
+    {
+        struct inotify_event* event = (struct inotify_event*) &buffer[i];
+
+        if (event->len)
+        {
+            if(!(event->mask & IN_ISDIR))
+            {
+                if(event->name[0] == '.')
+                {
+                    printf("[client] *** %s ignored\n",event->name);
+                    i += EVENT_SIZE + event->len;
+                    continue;
+                }
+            }
+
+            if ( event->mask & IN_CREATE )
+            {
+                if ( event->mask & IN_ISDIR )
+                {
+                    printf( "*** IN_CREATE DIR: %s\n", event->name );
+                }
+                else
+                {
+                    printf( "*** IN_CREATE FILE: %s\n", event->name );
+                }
+            }
+            else if ( event->mask & IN_DELETE )
+            {
+                if ( event->mask & IN_ISDIR )
+                {
+                    printf( "*** IN_DELETE FILE: %s\n", event->name );
+                }
+                else
+                {
+                    printf( "*** IN_DELETE DIR: %s\n", event->name );
+                }
+            }
+            else if ( event->mask & IN_MODIFY )
+            {
+                if ( event->mask & IN_ISDIR )
+                {
+                    printf( "*** IN_MODIFY DIR: %s\n", event->name );
+                }
+                else
+                {
+                    printf( "*** IN_MODIFY FILE: %s\n", event->name );
+                }
+            }
+            else if ( event->mask & IN_CLOSE_WRITE )
+            {
+                if ( event->mask & IN_ISDIR )
+                {
+                    printf( "*** IN_CLOSE_WRITE DIR: %s\n", event->name );
+                }
+                else
+                {
+                    printf( "*** IN_CLOSE_WRITE FILE: %s\n", event->name );
+                }
+            }
+            else if ( event->mask & IN_MOVED_TO )
+            {
+                if ( event->mask & IN_ISDIR )
+                {
+                    printf( "*** IN_MOVED_TO DIR: %s\n", event->name );
+                }
+                else
+                {
+                    printf( "*** IN_MOVED_TO FILE: %s\n", event->name );
+                }
+            }
+            else if ( event->mask & IN_MOVED_FROM )
+            {
+                if ( event->mask & IN_ISDIR )
+                {
+                    printf( "*** IN_MOVED_FROM DIR: %s\n", event->name );
+                }
+                else
+                {
+                    printf( "*** IN_MOVED_FROM FILE: %s\n", event->name );
+                }
+            }
+        }
+
+        i += EVENT_SIZE + event->len;
+    }
+
+    inotify_rm_watch( fd, wd );
+
+    close( fd );
+}
+
+int main()
+{
+    // while(1)
+    // {
+    //     create_sync_inotify_home_folder();
+    //     printf("[client] \n - \n");
+    // }
+
+    // int connect_server(char *host, int port);
+    // Declara
+    char username[USERNAME_SIZE];
+    int sockfd;
+    struct sockaddr_in serveraddr;
+    char buffer[BUFFER_SIZE];
+
+    // Inicializa
+    memset(buffer, 0, BUFFER_SIZE);
+    memset(username, 0, USERNAME_SIZE);
+
+    // Cria
+    sockfd = socket(AF_INET , SOCK_STREAM , 0);
+    if (sockfd == -1)
+    {
+        printf("[client] error opening socket\n");
+        return 1;
+    }
+    printf("[client] socket created\n");
+
+    // Configura
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serveraddr.sin_port = htons(SERVER_PORT);
+
+    // Conecta
+    if (connect(sockfd , (struct sockaddr *) &serveraddr , sizeof(serveraddr)) < 0)
+    {
+        printf("[client] error connecting to server\n");
+        return 1;
+    }
+    printf("[client] connected\n");
+
+    // Envia HI
+    memset(buffer, 0, BUFFER_SIZE);
+    strcpy(buffer, "HI");
+    if(send(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
+    {
+        printf("[client] Hi sent failed\n");
+        return 1;
+    }
+    // printf("[client] Hi sent\n");
+
+    // Recebe HI
+    memset(buffer, 0, BUFFER_SIZE);
+    if( recv(sockfd, buffer, BUFFER_SIZE, 0) < 0)
+    {
+        printf("[client] recv failed\n");
+        return 1;
+    }
+    // printf("[client] Hi feedback received\n");
+
+    // Envia username
+    memset(username, 0, USERNAME_SIZE);
+    printf("[client] username: ");
+    scanf("%s", username);
+
+    memset(buffer, 0, BUFFER_SIZE);
+    strcpy(buffer, "USERNAME");
+    strcat(buffer, " ");
+    strcat(buffer, username);
+    strcat(buffer, "\0");
+    if(send(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
+    {
+        puts("[client] send failed.\n");
+        return 1;
+    }
+    // printf("[client] username sent\n");
+
+    // Recebe username
+    memset(buffer, 0, BUFFER_SIZE);
+    if( recv(sockfd, buffer, BUFFER_SIZE, 0) < 0)
+    {
+        printf("[client] recv failed.\n");
+        return 1;
+    }
+    // printf("[client] username received\n");
+
+    // Cria pasta local do usuário
+    char folder[BUFFER_SIZE] = "/home/gustavo/sync_dir_";
+    strcat(folder, username);
+    struct stat st = {0};
+    if (stat("folder", &st) == -1) {
+        mkdir(folder, 0700);
+    }
+
+    printf("[client] local dir verified\n");
+
+    // Start the loop
+    while(1)
+    {
+        if(fill_buffer_with_command(buffer, BUFFER_SIZE) < 0)
+        {
+            continue;
+        }
+
+        switch(get_command_from_buffer(buffer))
+        {
+                case CMD_EXIT:
+
+                    // void close_connection();
+                    close(sockfd);
+                    return 0;
+
+                break;
+
+                case CMD_UPLOAD:
+
+                    if(process_upload(sockfd, buffer) < 0)
+                    {
+                        printf("[client] upload failed.\n");
+                        return -1;
+                    } else {
+                        printf("[client] upload completed.\n");
+                    }
+
+                break;
+
+                case CMD_DOWNLOAD:
+
+                    if(process_download(sockfd, buffer, username) < 0)
+                    {
+                        printf("[client] download failed.\n");
+                        return -1;
+                    } else {
+                        printf("[client] download completed.\n");
+                    }
+
+                break;
+
+                case CMD_SYNC:
+                    // todo:
+
+                break;
+
+                default:
+
+                    // Envia
+                    if(send(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
+                    {
+                        printf("[client] send command failed\n");
+                        return 1;
+                    }
+                    // printf("[client] command [%s] sent.\n", buffer);
+
+                    // Recebe
+                    memset(buffer, 0, BUFFER_SIZE);
+                    if( recv(sockfd, buffer, BUFFER_SIZE, 0) < 0)
+                    {
+                        printf("[client] recv failed\n");
+                        return 1;
+                    }
+                    printf("[client] server response:\n%s\\\n", buffer);
+
+                break;
+        }
+
+    }
+
+    close(sockfd);
+
+    return 0;
 }

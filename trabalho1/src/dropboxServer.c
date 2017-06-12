@@ -1,3 +1,13 @@
+//*
+//* Trabalho 1
+//* Instituto de Informática - UFRGS
+//* Sistemas Operacionais II N - 2017/1
+//* Prof. Dr. Alberto Egon Schaeffer Filho
+//*
+//* dropboxServer.c
+//* implementação das funções do cliente
+//*
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -11,11 +21,13 @@
 #include <time.h>
 #include <errno.h>
 
+// Server config
+#define LISTEN_IP "127.0.0.1"
+#define LISTEN_PORT 3003
 #define ROOT_PATH "/home/gustavo/Desktop/server/"
-
 #define NUM_MAX_CLIENT 10
-#define LISTEN_PORT 3002
 
+// Internal use
 #define BUFFER_SIZE 1024
 #define USERNAME_SIZE 100
 #define PATH_SIZE 2048
@@ -30,16 +42,14 @@
 struct client_info
 {
     int client_id;
-    struct sockaddr_in client_addr;
-    int client_sockfd;
-    int client_len;
+    int client_number;
+    struct sockaddr_in client_info;
     char folderPath[PATH_SIZE];
     char isActive;
     char username[USERNAME_SIZE];
 };
-
-struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE
-pthread_mutex_t lock;
+struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE ONE
+pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
 
 char toLowercase(char ch)
 {
@@ -232,10 +242,12 @@ int process_username(const int sockfd, const char* buffer, int id)
     command = strdup(strtok(copy, " "));
     username =  strdup(strtok(NULL, " "));
 
+
     // Faz login
 
     // Monta folderpath
     pthread_mutex_lock(&lock);
+    strcpy(client_info_array[id].username, username);
     memset(client_info_array[id].folderPath, 0, PATH_SIZE);
     strcpy(client_info_array[id].folderPath, ROOT_PATH);
     strcat(client_info_array[id].folderPath, "/");
@@ -244,6 +256,37 @@ int process_username(const int sockfd, const char* buffer, int id)
     char* folder = strdup(client_info_array[id].folderPath);
     pthread_mutex_unlock(&lock);
 
+    // Acha um client_id valido
+    int i = 0;
+    int connections = 0;
+    for (i = 0; i < NUM_MAX_CLIENT; ++i)
+    {
+        int cmp = strcmp(client_info_array[i].username, username);
+        if (cmp == 0)
+        {
+            ++connections;
+        }
+    }
+
+    if (connections > 2)
+    {
+        memset(message, 0, BUFFER_SIZE);
+        strcpy(message, "NOTOK");
+        write(sockfd, message, BUFFER_SIZE);
+
+        return;
+    }
+
+    int client_id = findSlotId();
+    if(client_id == -1)
+        {
+        printf("[server] i am full!\n");
+        memset(message, 0, BUFFER_SIZE);
+        strcpy(message, "SERVER");
+        write(sockfd, message, BUFFER_SIZE);
+        return;
+    }
+
     // Cria pasta do usuario
     if (stat("folder", &st) == -1) {
         mkdir(folder, 0700);
@@ -251,7 +294,7 @@ int process_username(const int sockfd, const char* buffer, int id)
 
     // Envia ok
     memset(message, 0, BUFFER_SIZE);
-    strcpy(message, "USERNAME OK");
+    strcpy(message, "OK");
     write(sockfd, message, BUFFER_SIZE);
 
     // Limpa sujeira
@@ -315,53 +358,53 @@ int process_error(const int sockfd, const char* buffer, int id)
 
 void* thread_function(void* thread_function_arg)
 {
-    // Thread id deste cliente
-    int id = (int) thread_function_arg;
-
-    // Dados deste cliente
+    // Client
+    int client_id;
     struct sockaddr_in client_addr;
-    int client_sockfd;
-    int client_len;
+    int client_number;
+
+    // Communication
     char buffer[BUFFER_SIZE];
-
     int read_size;
-    struct stat st = {0};
 
-    // Pega dados da cloud
+    // From thread
+    client_id = (int) thread_function_arg;
+
+    // Pega dados da shared
     pthread_mutex_lock(&lock);
-    client_addr = client_info_array[id].client_addr;
-    client_sockfd = client_info_array[id].client_sockfd;
-    client_len = client_info_array[id].client_len;
+    client_addr = client_info_array[client_id].client_info;
+    client_number = client_info_array[client_id].client_number;
     pthread_mutex_unlock(&lock);
 
     // Recebe comando do cliente
     memset(buffer, 0, BUFFER_SIZE);
-    while ((read_size = recv(client_sockfd, buffer, BUFFER_SIZE, MSG_WAITALL)) > 0)
+
+    while ((read_size = recv(client_number, buffer, BUFFER_SIZE, MSG_WAITALL)) > 0)
     {
         switch(getCommand(buffer))
         {
             case CMD_HI:
-                process_hi(client_sockfd, buffer, id);
+                process_hi(client_number, buffer, client_id);
             break;
 
             case CMD_USERNAME:
-                process_username(client_sockfd, buffer, id);
+                process_username(client_number, buffer, client_id);
             break;
 
             case CMD_LIST:
-                process_list(client_sockfd, buffer, id);
+                process_list(client_number, buffer, client_id);
             break;
 
             case CMD_RECV:
-                process_recv(client_sockfd, buffer, id);
+                process_recv(client_number, buffer, client_id);
             break;
 
             case CMD_SEND:
-                process_send(client_sockfd, buffer, id);
+                process_send(client_number, buffer, client_id);
             break;
 
             default:
-                process_error(client_sockfd, buffer, id);
+                process_error(client_number, buffer, client_id);
             break;
         }
 
@@ -379,26 +422,20 @@ void* thread_function(void* thread_function_arg)
         perror("[server] recv failed.\n");
     }
 
+    closeClient(client_id);
+
     return 0;
 }
 
-int main()
+int createAndListen(char* ip, int port)
 {
-    // Threads
-    pthread_t mypthreads[NUM_MAX_CLIENT];
-
     // Server socket
-    int server_sockfd;
-    struct sockaddr_in server_addr;
+    struct sockaddr_in sock_info;
+    int sock_number;
     int bind_number;
+    int listen_number;
 
-    // Client socket
-    struct sockaddr_in client_addr;
-    int client_sockfd;
-    int client_len;
-    int client_id;
-
-    // Limpa
+    // Reseta estrutura que hold data dos clientes
     pthread_mutex_lock(&lock);
     for(int i=0; i<NUM_MAX_CLIENT; i++)
     {
@@ -409,76 +446,140 @@ int main()
     }
     pthread_mutex_unlock(&lock);
 
+    // Fill sockaddr_in structure
+    sock_info.sin_family = AF_INET;
+    sock_info.sin_addr.s_addr = inet_addr(ip);
+    sock_info.sin_port = htons(port);
+
     // Create socket
-    server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_sockfd == -1)
+    sock_number = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_number == -1)
     {
-        printf("[server] could not create socket.\n");
+        printf("[server] socket failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
         return -1;
     }
-    fflush(stdin);
-    printf("[server] socket created.\n");
-
-    // Fill sockaddr_in structure
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    server_addr.sin_port = htons(LISTEN_PORT);
 
     // Bind
-    bind_number = bind(server_sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr));
+    bind_number = bind(sock_number, (struct sockaddr*) &sock_info, sizeof(sock_info));
     if (bind_number < 0)
     {
-        printf("[server] bind failed.\n");
+        printf("[server] bind failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
         return -1;
     }
-    printf("[server] bind done.\n");
 
     // Listen
-    listen(server_sockfd , 5);
-    printf("[server] listen done.\n");
-
-    // Aceita clientes ate explodir e finalizar
-    for (client_id = 0; client_id < NUM_MAX_CLIENT; client_id++)
+    listen_number = listen(sock_number , 5);
+    if(listen_number < 0)
     {
-        printf("[server] waiting for clients...\n");
+        printf("[server] listen failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
+        return -1;
+    }
+
+    return sock_number;
+}
+
+int closeClient(int client_id)
+{
+    // Limpa struct
+    pthread_mutex_lock(&lock);
+    client_info_array[client_id].client_id = -1;
+    memset(client_info_array[client_id].folderPath, 0, PATH_SIZE);
+    memset(client_info_array[client_id].username, 0, USERNAME_SIZE);
+    client_info_array[client_id].isActive = -1;
+    pthread_mutex_unlock(&lock);
+}
+
+int findSlotId()
+{
+    int client_id = -1;
+
+    pthread_mutex_lock(&lock);
+    for(int i=0; i<NUM_MAX_CLIENT; i++)
+    {
+        printf("[server] slot [%d] = %d\n",i,client_info_array[i].isActive);
+    }
+    for(int i=0; i<NUM_MAX_CLIENT; i++)
+    {
+        if(client_info_array[i].isActive == -1)
+        {
+            client_info_array[i].isActive = 0;
+            client_id = i;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+
+    return client_id;
+}
+
+int main()
+{
+    // Threads
+    pthread_t mypthreads[NUM_MAX_CLIENT];
+
+    // Server
+    int server_number;
+
+    // Create, Bind, Listen
+    server_number = createAndListen(LISTEN_IP, LISTEN_PORT);
+    if(server_number < 0)
+    {
+        printf("[server] server failed em iniciar\n");
+    }
+    printf("[server] server iniciado com sucesso! ip=%s port=%d\n", LISTEN_IP, LISTEN_PORT);
+
+    // Aceita clientes para sempre
+    int client_id = 0;
+    for (;;)
+    {
+        // Server
+        int total;
+
+        // Client
+        struct sockaddr_in client_info;
+        int client_info_size;
+        int client_number;
+
+        // Thread
+        int threadfd;
 
         // Accept client
-        client_len = sizeof(struct sockaddr_in);
-        client_sockfd = accept(server_sockfd, (struct sockaddr*) &client_addr, (socklen_t*) &client_len);
-        if (client_sockfd < 0)
+        printf("[server] waiting for client...\n");
+        client_info_size = sizeof(struct sockaddr_in);
+        client_number = accept(server_number, (struct sockaddr*) &client_info, (socklen_t*) &client_info_size);
+        if (client_number < 0)
         {
-            printf("[server] accept failed.\n");
+            printf("[server] accept failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
             return -1;
         }
-        printf("[server] client connection accepted.\n");
 
         // Seta client info
         pthread_mutex_lock(&lock);
         client_info_array[client_id].client_id = client_id;
-        client_info_array[client_id].client_len = client_len;
-        client_info_array[client_id].client_sockfd = client_sockfd;
-        client_info_array[client_id].client_addr = client_addr;
+        client_info_array[client_id].client_number = client_number;
+        client_info_array[client_id].client_info = client_info;
         pthread_mutex_unlock(&lock);
 
         // Inicia thread
-        int threadfd;
         threadfd = pthread_create(&mypthreads[client_id], NULL, thread_function, (void*) client_id);
         if (threadfd < 0)
         {
-            printf("[server] could not create thread.\n");
+            printf("[server] pthread_create failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
             return -1;
         }
-        printf("[server] client thread created.\n");
 
-        // Respira
+        client_id++;
+        // Respira kkk
         sleep(10);
     }
 
     // Espera threads
+    /*
     for (client_id = 0; client_id < NUM_MAX_CLIENT; client_id++)
     {
-        //pthread_join(&mypthreads[client_id]);
+        pthread_join(&mypthreads[client_id]);
     }
+    */
 
     // Safety
     pthread_exit(0);

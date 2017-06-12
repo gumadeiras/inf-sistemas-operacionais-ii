@@ -1,15 +1,27 @@
+//*
+//* Trabalho 1
+//* Instituto de Informática - UFRGS
+//* Sistemas Operacionais II N - 2017/1
+//* Prof. Dr. Alberto Egon Schaeffer Filho
+//*
+//* dropboxClient.c
+//* implementação das funções do cliente
+//*
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <linux/inotify.h>
+#include <pwd.h>
 
 #define BUFFER_SIZE 1024
 #define USERNAME_SIZE 100
-#define SERVER_PORT 3002
+#define SERVER_PORT 3003
 
 #define CMD_ERROR -1
 #define CMD_UPLOAD 1
@@ -129,7 +141,7 @@ int process_upload(const int sockfd, const char* buffer)
     free(copy);
 }
 
- // void receive_file(char *file);
+// void receive_file(char *file);
 int process_download(const int sockfd, const char* buffer, char* username)
 {
     // Declara e Inicializa
@@ -149,6 +161,7 @@ int process_download(const int sockfd, const char* buffer, char* username)
     char* filename2;
 
     char* filepath;
+    char* syncpath;
 
     // Pega dados do comando do usuario separados por espaco
     copy = strdup(buffer);
@@ -183,22 +196,35 @@ int process_download(const int sockfd, const char* buffer, char* username)
         return -1;
     }
 
+    // Cria a pasta sync na home do usuario se ela nao existe
+
+    // home
+    struct passwd* pw = getpwuid(getuid());
+    char* homedir = strdup(pw->pw_dir);
+    syncpath = malloc(BUFFER_SIZE);
+    memset(syncpath, 0, BUFFER_SIZE);
+    strcpy(syncpath, homedir);
+    strcat(syncpath, "/sync_dir_");
+    strcat(syncpath, username);
+    strcat(syncpath, "/");
+    if(mkdir(syncpath, 0700) < 0)
+    {
+        printf("[client] mkdir error (pasta ja existe) (errstr=%s) (errno=%d)\n", strerror(errno), errno);
+    }
+    printf("SYNCPATH: %s\n", syncpath);
+
     // Monta filepath
     printf("%s\n", username);
     filepath = malloc(BUFFER_SIZE);
     memset(filepath, 0, BUFFER_SIZE);
-    strcat(filepath, "/home/gustavo/sync_dir_"); // diretorio raz
-    strcat(filepath, username);                  // concatena como nome do usuario
-    strcat(filepath, "/");
-    strcat(filepath, filename);                 // concatena com o nome do arquivo
+    strcpy(filepath, syncpath);
+    strcat(filepath, filename);
     printf("FILEPATH: %s\n", filepath);
-    printf("[client] filepath: %s\n", filepath);
 
     // Cria arquivo
     filefd = fopen (filepath, "wb");
     if (filefd == NULL) {
-        printf("[client] ERROR!\n");
-        printf("[client] error: %d [%s]\n", errno, strerror(errno));
+        printf("[client] fopen error (errstr=%s) (errno=%d)\n", strerror(errno), errno);
         return -1;
     }
 
@@ -216,6 +242,21 @@ int process_download(const int sockfd, const char* buffer, char* username)
     // Limpa a sujeira
     fclose(filefd);
     free(filepath);
+}
+
+int deleteAllFiles(char* folderpath)
+{
+    DIR* folder = opendir(folderpath);
+    struct dirent* file;
+    char filepath[256];
+
+    while ((file = readdir(folder)) != NULL)
+    {
+        sprintf(filepath, "%s/%s", folderpath, file->d_name);
+        remove(filepath);
+    }
+
+    closedir(folder);
 }
 
 int fill_buffer_with_command(char* buffer, int size)
@@ -426,7 +467,6 @@ int main()
         printf("[client] error connecting to server\n");
         return 1;
     }
-    printf("[client] connected\n");
 
     // Envia HI
     memset(buffer, 0, BUFFER_SIZE);
@@ -473,13 +513,40 @@ int main()
     }
     // printf("[client] username received\n");
 
-    // Cria pasta local do usuário
-    char folder[BUFFER_SIZE] = "/home/gustavo/sync_dir_";
-    strcat(folder, username);
-    struct stat st = {0};
-    if (stat("folder", &st) == -1) {
-        mkdir(folder, 0700);
+    char* copy;
+    char* command;
+
+    // Pega dados do comando
+    copy = strdup(buffer);
+    command = strdup(strtok(copy, " "));
+
+
+    if (strcmp(command, "NOTOK") == 0)
+    {
+        printf("[client] too many active sessions.\n");
+        exit(0);
     }
+    else if (strcmp(command, "SERVER") == 0)
+    {
+        printf("[client] server can't accept new connections.\n");
+        exit(0);
+    }
+
+    printf("[client] connected\n");
+
+    // home
+    struct passwd* pw = getpwuid(getuid());
+    char* homedir = strdup(pw->pw_dir);
+
+    // Cria pasta sync local do usuário
+    char folder[BUFFER_SIZE];
+    strcpy(folder, homedir);
+    strcat(folder, "/sync_dir_");
+    strcat(folder, username);
+    strcat(folder, "/");
+    struct stat st = {0};
+    mkdir(folder, 0700);
+    printf("HOME=%s\n", folder);
 
     printf("[client] local dir verified\n");
 
