@@ -58,7 +58,8 @@ char toLowercase(char ch)
 
 void turnStringLowercase(char* string)
 {
-    for (int index=0; string[index]; index++)
+	int index;
+    for (index=0; string[index]; index++)
     {
         string[index] = toLowercase(string[index]);
     }
@@ -441,7 +442,8 @@ int createAndListen(char* ip, int port)
 
     // Reseta estrutura que hold data dos clientes
     pthread_mutex_lock(&lock);
-    for(int i=0; i<NUM_MAX_CLIENT; i++)
+    int i;
+    for(i=0; i<NUM_MAX_CLIENT; i++)
     {
         client_info_array[i].client_id = -1;
         client_info_array[i].isActive = -1;
@@ -498,11 +500,12 @@ int findSlotId()
     int client_id = -1;
 
     pthread_mutex_lock(&lock);
-    for(int i=0; i<NUM_MAX_CLIENT; i++)
+    int i;
+    for(i=0; i<NUM_MAX_CLIENT; i++)
     {
         printf("[server] slot [%d] = %d\n",i,client_info_array[i].isActive);
     }
-    for(int i=0; i<NUM_MAX_CLIENT; i++)
+    for(i=0; i<NUM_MAX_CLIENT; i++)
     {
         if(client_info_array[i].isActive == -1)
         {

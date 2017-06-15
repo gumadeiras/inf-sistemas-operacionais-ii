@@ -39,7 +39,8 @@ char toLowercase(char ch)
 
 void turnStringLowercase(char* string)
 {
-    for(int index=0; string[index]; index++)
+	int index;
+    for(index=0; string[index]; index++)
     {
         string[index] = toLowercase(string[index]);
     }
