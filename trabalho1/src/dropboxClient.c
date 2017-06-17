@@ -21,7 +21,7 @@
 
 #define BUFFER_SIZE 1024
 #define USERNAME_SIZE 100
-#define SERVER_PORT 3002
+// #define SERVER_PORT 3002
 #define IP_SIZE 15
 
 #define CMD_ERROR -1
@@ -40,7 +40,7 @@ char toLowercase(char ch)
 
 void turnStringLowercase(char* string)
 {
-	int index;
+    int index;
     for(index=0; string[index]; index++)
     {
         string[index] = toLowercase(string[index]);
@@ -244,6 +244,7 @@ int process_download(const int sockfd, const char* buffer, char* username)
     // Limpa a sujeira
     fclose(filefd);
     free(filepath);
+    free(syncpath);
 }
 
 int deleteAllFiles(char* folderpath)
@@ -456,16 +457,24 @@ int main()
         printf("[client] error opening socket\n");
         return 1;
     }
-    int ServerIP[IP_SIZE];
-    printf("[client] Enter with server IP: ");
-    scanf("%s", ServerIP);
-    
+
+    char port[IP_SIZE];
+    char server_ip[IP_SIZE];
+    int server_port;
+
+    printf("[client] enter server ip: ");
+    scanf("%s", server_ip);
+
+    printf("[client] enter server port: ");
+    scanf("%s", port);
+    server_port = atoi(port);
+
     printf("[client] socket created\n");
 
     // Configura
     serveraddr.sin_family = AF_INET;
-    serveraddr.sin_addr.s_addr = inet_addr(ServerIP);
-    serveraddr.sin_port = htons(SERVER_PORT);
+    serveraddr.sin_addr.s_addr = inet_addr(server_ip);
+    serveraddr.sin_port = htons(server_port);
 
     // Conecta
     if (connect(sockfd , (struct sockaddr *) &serveraddr , sizeof(serveraddr)) < 0)
@@ -552,7 +561,7 @@ int main()
     strcat(folder, "/");
     struct stat st = {0};
     mkdir(folder, 0700);
-    printf("HOME=%s\n", folder);
+    printf("[client] home = %s\n", folder);
 
     printf("[client] local dir verified\n");
 

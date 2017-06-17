@@ -20,12 +20,14 @@
 #include <dirent.h>
 #include <time.h>
 #include <errno.h>
+#include <pwd.h>
 
 // Server config
-#define LISTEN_IP "192.168.0.12"
-#define LISTEN_PORT 3002
-#define ROOT_PATH "/home/jonathan/Documentos/server"
+// #define LISTEN_IP "192.168.0.12"
+// #define LISTEN_PORT 3002
+// #define ROOT_PATH "/home/gustavo/Desktop/server"
 #define NUM_MAX_CLIENT 10
+#define IP_SIZE 15
 
 // Internal use
 #define BUFFER_SIZE 1024
@@ -237,21 +239,30 @@ int process_username(const int sockfd, const char* buffer, int id)
     char* copy;
     char* command;
     char* username;
+    char* serverpath;
 
     // Pega dados do comando
     copy = strdup(buffer);
     command = strdup(strtok(copy, " "));
     username =  strdup(strtok(NULL, " "));
 
+    struct passwd* pw = getpwuid(getuid());
+    char* homedir = strdup(pw->pw_dir);
+    serverpath = malloc(BUFFER_SIZE);
+    memset(serverpath, 0, BUFFER_SIZE);
+    strcpy(serverpath, homedir);
+    strcat(serverpath, "/server/");
 
-    // Faz login
+    if (stat("serverpath", &st) == -1) {
+        mkdir(serverpath, 0700);
+    }
 
     // Monta folderpath
     pthread_mutex_lock(&lock);
     strcpy(client_info_array[id].username, username);
     memset(client_info_array[id].folderPath, 0, PATH_SIZE);
-    strcpy(client_info_array[id].folderPath, ROOT_PATH);
-    strcat(client_info_array[id].folderPath, "/");
+    strcpy(client_info_array[id].folderPath, homedir);
+    strcat(client_info_array[id].folderPath, "/server/");
     strcat(client_info_array[id].folderPath, username);
     strcat(client_info_array[id].folderPath, "/");
     char* folder = strdup(client_info_array[id].folderPath);
@@ -481,6 +492,7 @@ int createAndListen(char* ip, int port)
         return -1;
     }
 
+    printf("[server] server is up, listening on %s:%d\n", inet_ntoa(sock_info.sin_addr), ntohs(sock_info.sin_port));
     return sock_number;
 }
 
@@ -527,13 +539,23 @@ int main()
     // Server
     int server_number;
 
+    char port[IP_SIZE];
+    char server_ip[IP_SIZE];
+    int server_port;
+
+    printf("[server] enter server ip: ");
+    scanf("%s", server_ip);
+
+    printf("[server] enter server port: ");
+    scanf("%s", port);
+    server_port = atoi(port);
+
     // Create, Bind, Listen
-    server_number = createAndListen(LISTEN_IP, LISTEN_PORT);
+    server_number = createAndListen(server_ip, server_port);
     if(server_number < 0)
     {
         printf("[server] server failed em iniciar\n");
     }
-    printf("[server] server iniciado com sucesso! ip=%s port=%d\n", LISTEN_IP, LISTEN_PORT);
 
     // Aceita clientes para sempre
     int client_id = 0;
