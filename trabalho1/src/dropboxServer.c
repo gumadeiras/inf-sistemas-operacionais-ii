@@ -22,9 +22,9 @@
 #include <errno.h>
 
 // Server config
-#define LISTEN_IP "127.0.0.1"
+#define LISTEN_IP "192.168.0.12"
 #define LISTEN_PORT 3002
-#define ROOT_PATH "/home/gustavo/Desktop/server/"
+#define ROOT_PATH "/home/jonathan/Documentos/server"
 #define NUM_MAX_CLIENT 10
 
 // Internal use

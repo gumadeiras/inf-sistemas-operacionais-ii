@@ -22,6 +22,7 @@
 #define BUFFER_SIZE 1024
 #define USERNAME_SIZE 100
 #define SERVER_PORT 3002
+#define IP_SIZE 15
 
 #define CMD_ERROR -1
 #define CMD_UPLOAD 1
@@ -455,11 +456,15 @@ int main()
         printf("[client] error opening socket\n");
         return 1;
     }
+    int ServerIP[IP_SIZE];
+    printf("[client] Enter with server IP: ");
+    scanf("%s", ServerIP);
+    
     printf("[client] socket created\n");
 
     // Configura
     serveraddr.sin_family = AF_INET;
-    serveraddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serveraddr.sin_addr.s_addr = inet_addr(ServerIP);
     serveraddr.sin_port = htons(SERVER_PORT);
 
     // Conecta
