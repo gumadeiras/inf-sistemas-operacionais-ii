@@ -111,6 +111,8 @@ int get_command_from_buffer(const char* string)
 // void send_file(char *file);
 int process_upload(const int sockfd, const char* buffer)
 {
+	printf("[client] process_upload()\n");
+
     // Declara e Inicializa
     char message[BUFFER_SIZE];
 
@@ -122,7 +124,6 @@ int process_upload(const int sockfd, const char* buffer)
     char* command;
     char* filepath;
     char* filename;
-
     char filesize[50];
 
     // Pega dados do comando que estao separados por um espaco
@@ -152,9 +153,9 @@ int process_upload(const int sockfd, const char* buffer)
     strcat(message, filename);
     strcat(message," ");
     strcat(message, filesize);
-    // printf("[client] MONTA COMANDO: COMMAND: %s\n", command);
-    // printf("[client] MONTA COMANDO: FILENAME: %s\n", filename);
-    // printf("[client] MONTA COMANDO: FILESIZE: %s\n", filesize);
+    
+    printf("    [client] process_upload(): filename::%s\n",filename);
+    printf("    [client] process_upload(): filesize::%s\n",filesize);
 
     // Envia comando
     // printf("[client] ENVIA COMANDO: %s\n", message);
@@ -162,10 +163,13 @@ int process_upload(const int sockfd, const char* buffer)
 
     // Envia arquivo
     remain_data = atoi(filesize);
+    int j = 0;
     while (remain_data > 0 && (data_read = fread(&message, 1, BUFFER_SIZE, filefd)) > 0)
     {
+    	j++;
         int data_sent = send(sockfd, message, data_read, NULL);
         remain_data -= data_sent;
+        printf("  send[%d]: dataread::%d datasent::%d remaindata::%d filesize::%s\n", j, data_read, data_sent, remain_data, filesize);
     }
 
     // Limpa a sujeira
@@ -173,9 +177,24 @@ int process_upload(const int sockfd, const char* buffer)
     free(copy);
 }
 
+/*
+* Recebe um arquivo do servidor
+
+[client] envia "download dog.jpg"
+[client] recebe "sending dog.jpg 115901"
+
+[client] recebe "binary data of file"
+
+*/
 // void receive_file(char *file);
 int process_download(const int sockfd, const char* buffer, char* username)
 {
+	// Desativa inotify
+    pthread_mutex_lock(&lock);
+    shared_inotify_isenabled = 0;
+    pthread_mutex_unlock(&lock);
+
+
     // Declara e Inicializa
     char message[BUFFER_SIZE];
 
@@ -224,13 +243,10 @@ int process_download(const int sockfd, const char* buffer, char* username)
     if (strcmp(command, "ERROR") == 0)
     {
         printf("[client] ERROR!\n", NULL);
-        printf("[client] %s\n", message);
         return -1;
     }
 
-    // Cria a pasta sync na home do usuario se ela nao existe
-
-    // home
+    // Homepath
     struct passwd* pw = getpwuid(getuid());
     char* homedir = strdup(pw->pw_dir);
     syncpath = malloc(BUFFER_SIZE);
@@ -243,9 +259,8 @@ int process_download(const int sockfd, const char* buffer, char* username)
     {
         printf("[client] mkdir error (pasta ja existe) (errstr=%s) (errno=%d)\n", strerror(errno), errno);
     }
-    printf("SYNCPATH: %s\n", syncpath);
 
-    // Monta filepath
+    // Filepath
     printf("%s\n", username);
     filepath = malloc(BUFFER_SIZE);
     memset(filepath, 0, BUFFER_SIZE);
@@ -262,18 +277,26 @@ int process_download(const int sockfd, const char* buffer, char* username)
 
     // Recebe arquivo
     memset(message, 0, BUFFER_SIZE);
-    while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL)) > 0)
+    int j = 0;
+    while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, NULL)) > 0)
     {
-        fwrite(&message, 1, data_read, filefd);
+        int data_write = fwrite(&message, 1, data_read, filefd);
         remain_data -= data_read;
-        printf("[client] RECV(): [%d/%d - %d]\n", remain_data, atoi(filesize), data_read);
         memset(message, 0, BUFFER_SIZE);
+        j++;
+        printf("  recebendo[%d]: recv()::%d fwrite()::%d remaindata::%d filesize::%s\n", j, data_read, data_write, remain_data, filesize);
     }
-    printf("[client] transfer completed\n", NULL);
 
     // Limpa a sujeira
     fclose(filefd);
     free(filepath);
+
+    // Ativa inotify
+    pthread_mutex_lock(&lock);
+    shared_inotify_isenabled = 1;
+    pthread_mutex_unlock(&lock);
+
+    printf("[client] Download concluido\n", NULL);
 }
 
 int deleteAllFiles(char* folderpath)
@@ -452,6 +475,10 @@ int process_sync_server(int sockfd, char* username)
         }
     }
     closedir(pDir);
+
+    // Recebe pedido
+    printf("Waiting server permission...\n", NULL);
+    receber(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
 
     // Avisa que terminou
     memset(message, 0, BUFFER_SIZE);
@@ -634,8 +661,9 @@ void* inotify_thread_function(void* thread_function_arg)
         int isenabled = shared_inotify_isenabled;
         pthread_mutex_unlock(&lock);
 
-        if(!isenabled)
+        if(isenabled == 0)
         {
+        	printf("isenabled == false! ignorando modificacoes");
             continue;
         }
         
@@ -748,10 +776,7 @@ void* inotify_thread_function(void* thread_function_arg)
 int conecta()
 {
     int sockfd;
-
-    // Client
     char username[USERNAME_SIZE];
-    
     struct sockaddr_in serveraddr;
     char buffer[BUFFER_SIZE];
 
@@ -760,12 +785,11 @@ int conecta()
 
     // Cria
     sockfd = socket(AF_INET , SOCK_STREAM , 0);
-    if (sockfd == -1)
+    if (sockfd < 0)
     {
         printf("[client] error opening socket\n", NULL);
         return 1;
     }
-    printf("[client] socket created\n", NULL);
 
     // Configura
     serveraddr.sin_family = AF_INET;
@@ -806,7 +830,7 @@ int conecta()
     strcat(buffer, " ");
     strcat(buffer, username);
     strcat(buffer, "\0");
-    if(enviar(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
+    if (enviar(sockfd, buffer, BUFFER_SIZE, 0) < 0)
     {
         puts("[client] send failed.\n");
         return 1;
@@ -898,11 +922,15 @@ int main()
     // Start the loop
     while(1)
     {
+
+
         // Verifica se usuario modificou home folder
         if(shared_update)
         {
-            printf("Wait, updating server...", NULL);
+        	// Upload all files to server
             process_sync_server(sockfd, username);
+
+            // Para nao repetir a sincronizacao
             pthread_mutex_lock(&lock);
             shared_update = 0;
             pthread_mutex_unlock(&lock);
@@ -910,14 +938,12 @@ int main()
 
 
         // Verifica se servidor recebeu algum arquivo de outra instancia
-        else if(check_if_server_has_changed(sockfd, username))
+        if(check_if_server_has_changed(sockfd, username))
         {
-            printf("Wait, updating this client...", NULL);
         }
 
-
         // Pega um comando do usuario e processa
-        else if(fill_buffer_with_command(buffer, BUFFER_SIZE) < 0)
+        if(fill_buffer_with_command(buffer, BUFFER_SIZE) < 0)
         {
             continue;
         }

@@ -170,11 +170,13 @@ int process_recv(const int sockfd, const char* buffer, int id)
 
     // Recebe arquivo
     remain_data = atoi(filesize);
+    int j = 0;
     while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, NULL)) > 0)
     {
-        fwrite(&message, 1, data_read, filefp);
+        int datawrite = fwrite(&message, 1, data_read, filefp);
         remain_data -= data_read;
-        printf("[server] File: [%d/%d - %d]\n", remain_data, atoi(filesize), data_read);
+        j++;
+        printf("  send[%d]: dataread::%d datawrite::%d remaindata::%d filesize::%s\n", j, data_read, datawrite, remain_data, filesize);
     }
     printf("[server] Transfer completed\n");
 
@@ -243,11 +245,14 @@ int process_send(const int sockfd, const char* buffer, int id)
     // Envia arquivo
     memset(message, 0, BUFFER_SIZE);
     remain_data = atoi(filesize);
+    int j = 0;
     while (remain_data > 0 && (data_read = fread(&message, 1, BUFFER_SIZE, filefd)) > 0)
     {
-        int data_sent = enviar(sockfd, message, data_read, NULL);
+        int data_sent = send(sockfd, message, data_read, NULL);
         remain_data -= data_sent;
         memset(message, 0, BUFFER_SIZE);
+        j++;
+        printf("  enviando[%d]: fread()::%d send()::%d remaindata::%d filesize::%s\n", j, data_read, data_sent, remain_data, filesize);
     }
 
     // Limpa a sujeira
@@ -437,7 +442,7 @@ int receive_one_file(int sockfd, char* filepath, char* filename, int filesize)
 
         j++;
 
-        printf("dataread::%d datawrite::%d remaindata::%d filesize::%d j::%d \n", data_read, data_write, remain_data, filesize, j);
+        printf("  recv[%d]: dataread::%d datawrite::%d remaindata::%d filesize::%d j::%d \n", j, data_read, data_write, remain_data, filesize);
     }
 
     fclose(filefd);
