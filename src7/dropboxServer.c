@@ -23,11 +23,7 @@
 #include <pwd.h>
 
 // Server config
-// #define LISTEN_IP "127.0.0.1"
-// #define LISTEN_IP "10.0.2.15"
-// #define LISTEN_PORT 3003
 #define IP_SIZE 15
-#define ROOT_PATH "/home/gustavo/server/"
 #define NUM_MAX_CLIENT 10
 
 // Internal use
@@ -53,6 +49,7 @@ struct client_info
     char isActive;
     char username[USERNAME_SIZE];
 };
+
 struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE ONE
 pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
 
@@ -833,6 +830,14 @@ int main()
         printf("[server] server failed em iniciar\n");
     }
 
+    char* syncpath;
+    struct passwd* pw = getpwuid(getuid());
+    char* homedir = strdup(pw->pw_dir);
+    syncpath = malloc(BUFFER_SIZE);
+    memset(syncpath, 0, BUFFER_SIZE);
+    strcpy(syncpath, homedir);
+    strcat(syncpath, "/server/");
+    mkdir(syncpath, 0700);
 
     // Aceita clientes para sempre
     int client_id = 0;

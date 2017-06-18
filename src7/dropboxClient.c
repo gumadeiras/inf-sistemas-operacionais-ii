@@ -22,7 +22,6 @@
 
 #define BUFFER_SIZE 1024
 #define USERNAME_SIZE 100
-// #define SERVER_PORT 3003
 #define IP_SIZE 15
 
 #define CMD_ERROR -1

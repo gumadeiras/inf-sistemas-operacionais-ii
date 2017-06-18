@@ -515,7 +515,7 @@ int findSlotId()
     int i;
     for(i=0; i<NUM_MAX_CLIENT; i++)
     {
-        printf("[server] slot [%d] = %d\n",i,client_info_array[i].isActive);
+        // printf("[server] slot [%d] = %d\n",i,client_info_array[i].isActive);
     }
     for(i=0; i<NUM_MAX_CLIENT; i++)
     {
