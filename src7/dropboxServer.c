@@ -39,6 +39,7 @@
 #define CMD_SEND 5
 #define CMD_SYNC_CLIENT 6
 #define CMD_SYNC_SERVER 7
+#define CMD_NEWFILES 8
 
 struct client_info
 {
@@ -48,6 +49,7 @@ struct client_info
     char folderPath[PATH_SIZE];
     char isActive;
     char username[USERNAME_SIZE];
+    int new_files;
 };
 
 struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE ONE
@@ -124,6 +126,10 @@ int getCommand(const char* string)
     {
         command = CMD_SYNC_SERVER;
     }
+    if (strcmp(firstString, "newfiles") == 0)
+    {
+        command = CMD_NEWFILES;
+    }
 
     free(copy);
 
@@ -157,6 +163,7 @@ int process_recv(const int sockfd, const char* buffer, int id)
     memset(filepath, 0, 2048);
     pthread_mutex_lock(&lock);
     strcpy(filepath, client_info_array[id].folderPath);
+    client_info_array[id].new_files = 1;
     pthread_mutex_unlock(&lock);
     strcat(filepath, "/");
     strcat(filepath, filename);
@@ -349,6 +356,45 @@ int process_hi(const int sockfd, const char* buffer, int id)
     enviar(sockfd, message, BUFFER_SIZE, NULL);
 }
 
+int process_newfiles(const int sockfd, const char* buffer, int id)
+{
+    char* copy = strdup(buffer);
+    printf("process_newfiles: buffer: %s\n", copy);
+    char* firstString = strtok(copy, " ");
+    char* username = strtok(NULL, " ");
+    printf("nome do usuario %s\n", username);
+
+    char message[BUFFER_SIZE];
+    memset(message, 0, BUFFER_SIZE);
+
+    int cmp;
+    int nf;
+    int cid;
+    char* user;
+
+    int i = 0;
+    for (i = 0; i < NUM_MAX_CLIENT; ++i)
+    {
+        pthread_mutex_lock(&lock);
+        nf = client_info_array[i].new_files;
+        cid = client_info_array[i].client_id;
+        user = strdup(client_info_array[i].username);
+        pthread_mutex_unlock(&lock);
+        cmp = strcmp(user, username);
+        if (cmp == 0 && cid != id && nf == 1)
+        {
+        printf("VAMO SYNC\n");
+        strcpy(message, "NOTOK");
+        enviar(sockfd, message, BUFFER_SIZE, NULL);
+        }
+    }
+    printf("nao vamo sync\n");
+    strcpy(message, "OK");
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
+
+    return 0;
+}
+
 int process_list(const int sockfd, const char* buffer, int id)
 {
     char pString[BUFFER_SIZE];
@@ -465,6 +511,7 @@ int process_sync_server(const int sockfd, const char* buffer, int id)
     char* folderpath;
     pthread_mutex_lock(&lock);
     folderpath = strdup(client_info_array[id].folderPath);
+    client_info_array[id].new_files = 1;
     pthread_mutex_unlock(&lock);
 
     // Apaga tudo
@@ -493,9 +540,9 @@ int process_sync_server(const int sockfd, const char* buffer, int id)
             strcpy(filepath, folderpath);
             strcat(filepath, filename);
 
-            printf("process_sync_client: filepath::[%s]\n", filepath);
-            printf("process_sync_client: filename::[%s]\n", filename);
-            printf("process_sync_client: filesize::[%s]\n", filesize);
+            // printf("process_sync_client: filepath::[%s]\n", filepath);
+            // printf("process_sync_client: filename::[%s]\n", filename);
+            // printf("process_sync_client: filesize::[%s]\n", filesize);
 
             receive_one_file(sockfd, filepath, filename, atoi(filesize));
 
@@ -513,7 +560,7 @@ int process_sync_server(const int sockfd, const char* buffer, int id)
 
 int process_sync_client(const int sockfd, const char* buffer, int id)
 {
-    printf("process_sync_client(): iniciando...\n");
+    // printf("process_sync_client(): iniciando...\n");
 
     char message[BUFFER_SIZE];
     int ret;
@@ -526,7 +573,7 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
     pthread_mutex_lock(&lock);
     folderpath = strdup(client_info_array[id].folderPath);
     pthread_mutex_unlock(&lock);
-    printf("process_sync_client(): pasta do usuario::%s\n", folderpath);
+    // printf("process_sync_client(): pasta do usuario::%s\n", folderpath);
 
 
     // Envia todos arquivos
@@ -549,10 +596,10 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
 
 
             // Recebe pedido de um
-            printf("Waiting client permission...\n");
+            // printf("Waiting client permission...\n");
             memset(buffer, 0, BUFFER_SIZE);
             recv(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
-            printf("process_sync_client(): recebido::%s\n", buffer);
+            // printf("process_sync_client(): recebido::%s\n", buffer);
 
 
             // Filepath
@@ -560,7 +607,7 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
             strcpy(filepath, folderpath);
             strcat(filepath, "/");
             strcat(filepath, filename);
-            printf("process_sync_client(): filepath::%s\n", filepath);
+            // printf("process_sync_client(): filepath::%s\n", filepath);
 
             // Abre arquivo
             filefd = fopen (filepath, "rb");
@@ -568,7 +615,7 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
                 printf("process_sync_client: fopen error :(\n");
                 return -1;
             }
-            printf("process_sync_client(): arquivo aberto\n");
+            // printf("process_sync_client(): arquivo aberto\n");
 
 
             // Pega filesize
@@ -577,7 +624,7 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
             rewind(filefd);
             remain_data = atoi(filesizes);
             filesize = atoi(filesizes);
-            printf("process_sync_client(): filesize::%d\n",filesize);
+            // printf("process_sync_client(): filesize::%d\n",filesize);
 
 
             // Envia FILE
@@ -592,7 +639,7 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
             {
                 printf("process_sync_client: send error :(\n");
             }
-            printf("process_sync_client(): enviado::%s\n",message);
+            // printf("process_sync_client(): enviado::%s\n",message);
 
 
             // Envia arquivo
@@ -609,10 +656,10 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
 
                 memset(message, 0, BUFFER_SIZE);
 
-                printf("  dataread::%d data_sent::%d remaindata::%d filesize::%d j::%d \n", data_read, data_sent, remain_data, filesize, j);
+                // printf("  dataread::%d data_sent::%d remaindata::%d filesize::%d j::%d \n", data_read, data_sent, remain_data, filesize, j);
             }
 
-            printf("process_sync_client(): FINALIZADO\n");
+            // printf("process_sync_client(): FINALIZADO\n");
             fclose(filefd);
         }
     }
@@ -620,16 +667,16 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
     closedir(pDir);
 
     // Espera client pedir mais um
-    printf("Waiting client permission...\n");
+    // printf("Waiting client permission...\n");
     memset(buffer, 0, BUFFER_SIZE);
     recv(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
-    printf("process_sync_client(): recebido::%s\n", buffer);
+    // printf("process_sync_client(): recebido::%s\n", buffer);
 
     // Avisa que terminou
     memset(message, 0, BUFFER_SIZE);
     strcpy(message, "FIM A B C D");
     write(sockfd, message, BUFFER_SIZE);
-    printf("process_sync_client(): enviado FIM::%s\n", message);
+    // printf("process_sync_client(): enviado FIM::%s\n", message);
 
 
     free(folderpath);
@@ -690,6 +737,10 @@ void* thread_function(void* thread_function_arg)
 
             case CMD_SYNC_SERVER:
                 process_sync_server(client_number, buffer, client_id);
+            break;
+
+            case CMD_NEWFILES:
+                process_newfiles(client_number, buffer, client_id);
             break;
 
             default:

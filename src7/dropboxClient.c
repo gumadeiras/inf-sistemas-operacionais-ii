@@ -885,6 +885,41 @@ int conecta()
 
 int check_if_server_has_changed(int sockfd, char* username)
 {
+    char buffer[BUFFER_SIZE];
+    memset(buffer, 0, BUFFER_SIZE);
+    strcpy(buffer, "newfiles");
+    strcat(buffer, " ");
+    strcat(buffer, username);
+    strcat(buffer, " ");
+    strcat(buffer, "end");
+    printf("enviar: %s\n", buffer);
+    printf("enviandoooo\n");
+    if(enviar(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
+    {
+        printf("[client] check_if_server_has_changed failed\n", NULL);
+        return 1;
+    }
+
+    memset(buffer, 0, BUFFER_SIZE);
+    printf("recebendoooo\n");
+    if( receber(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL) < 0)
+    {
+        printf("[client] check_if_server_has_changed recv failed\n", NULL);
+        return 1;
+    }
+
+    char* command = strdup(strtok(buffer, " "));
+    printf("recebeu: %s\n", command);
+    if (strcmp(command, "NOTOK") == 0)
+    {
+        printf("sincronizandooooo\n");
+        return 3;
+    }
+    else if (strcmp(command, "OK") == 0)
+    {
+        printf("segue o jogo\n");
+    }
+
     return 0;
 }
 
@@ -946,8 +981,10 @@ int main()
 
 
         // Verifica se servidor recebeu algum arquivo de outra instancia
-        if(check_if_server_has_changed(sockfd, username))
+        if(check_if_server_has_changed(sockfd, username) == 3)
         {
+            process_sync_client(sockfd, buffer, username);
+            continue;
         }
 
         // Pega um comando do usuario e processa
