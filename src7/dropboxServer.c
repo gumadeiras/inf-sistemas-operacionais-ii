@@ -20,11 +20,14 @@
 #include <dirent.h>
 #include <time.h>
 #include <errno.h>
+#include <pwd.h>
 
 // Server config
-#define LISTEN_IP "127.0.0.1"
-#define LISTEN_PORT 3002
-#define ROOT_PATH "/home/mauricio/Desktop/server/"
+// #define LISTEN_IP "127.0.0.1"
+// #define LISTEN_IP "10.0.2.15"
+// #define LISTEN_PORT 3003
+#define IP_SIZE 15
+#define ROOT_PATH "/home/gustavo/server/"
 #define NUM_MAX_CLIENT 10
 
 // Internal use
@@ -55,16 +58,16 @@ pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
 
 int enviar(int s, char* b, int size, int flags)
 {
-	int r = send(s, b, size, flags);
-	printf("[client-sent] %s\n", b);
-	return r;
+    int r = send(s, b, size, flags);
+    printf("[client-sent] %s\n", b);
+    return r;
 }
 
 int receber(int s, char* b, int size, int flags)
 {
-	int r = recv(s, b, size, flags);
-	printf("[client-received] %s\n", b);
-	return r;
+    int r = recv(s, b, size, flags);
+    printf("[client-received] %s\n", b);
+    return r;
 }
 
 char toLowercase(char ch)
@@ -74,7 +77,7 @@ char toLowercase(char ch)
 
 void turnStringLowercase(char* string)
 {
-	int index;
+    int index;
     for (index=0; string[index]; index++)
     {
         string[index] = toLowercase(string[index]);
@@ -274,15 +277,19 @@ int process_username(const int sockfd, const char* buffer, int id)
     command = strdup(strtok(copy, " "));
     username =  strdup(strtok(NULL, " "));
 
-
-    // Faz login
+    char* syncpath;
+    struct passwd* pw = getpwuid(getuid());
+    char* homedir = strdup(pw->pw_dir);
+    syncpath = malloc(BUFFER_SIZE);
+    memset(syncpath, 0, BUFFER_SIZE);
+    strcpy(syncpath, homedir);
 
     // Monta folderpath
     pthread_mutex_lock(&lock);
     strcpy(client_info_array[id].username, username);
     memset(client_info_array[id].folderPath, 0, PATH_SIZE);
-    strcpy(client_info_array[id].folderPath, ROOT_PATH);
-    strcat(client_info_array[id].folderPath, "/");
+    strcpy(client_info_array[id].folderPath, syncpath);
+    strcat(client_info_array[id].folderPath, "/server/");
     strcat(client_info_array[id].folderPath, username);
     strcat(client_info_array[id].folderPath, "/");
     char* folder = strdup(client_info_array[id].folderPath);
@@ -420,7 +427,7 @@ int receive_one_file(int sockfd, char* filepath, char* filename, int filesize)
 
     filefd = fopen(filepath, "wb");
 
-    if (filefd == NULL) 
+    if (filefd == NULL)
     {
         printf("fopen error\n");
         return -1;
@@ -455,10 +462,10 @@ int receive_one_file(int sockfd, char* filepath, char* filename, int filesize)
 
 int process_sync_server(const int sockfd, const char* buffer, int id)
 {
-	int ret = 0;
+    int ret = 0;
 
-	// Pega folderpath
-	char* folderpath;
+    // Pega folderpath
+    char* folderpath;
     pthread_mutex_lock(&lock);
     folderpath = strdup(client_info_array[id].folderPath);
     pthread_mutex_unlock(&lock);
@@ -466,54 +473,54 @@ int process_sync_server(const int sockfd, const char* buffer, int id)
     // Apaga tudo
     deleteAllFiles(folderpath);
 
-   	// Recebe tudo
-	while(1)
-	{
-		char message[BUFFER_SIZE];
-	    memset(message, 0, BUFFER_SIZE);
-	    strcpy(message, "NEXT");
-	    strcat(message," ");
-	    strcat(message,"arg1");
-		ret = enviar(sockfd, message, BUFFER_SIZE, NULL);
+    // Recebe tudo
+    while(1)
+    {
+        char message[BUFFER_SIZE];
+        memset(message, 0, BUFFER_SIZE);
+        strcpy(message, "NEXT");
+        strcat(message," ");
+        strcat(message,"arg1");
+        ret = enviar(sockfd, message, BUFFER_SIZE, NULL);
 
-		memset(message, 0, BUFFER_SIZE);
-		ret = recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
-		char* arg1 = strdup(strtok(message, " "));
+        memset(message, 0, BUFFER_SIZE);
+        ret = recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
+        char* arg1 = strdup(strtok(message, " "));
 
-		if(strcmp(arg1, "FILE") == 0)
-	    {
-	        char* filename = strdup(strtok(NULL, " "));
-	        char* filesize = strdup(strtok(NULL, " "));
-	        
-	        char filepath[1024];
-	        strcpy(filepath, folderpath);
-	        strcat(filepath, filename);
+        if(strcmp(arg1, "FILE") == 0)
+        {
+            char* filename = strdup(strtok(NULL, " "));
+            char* filesize = strdup(strtok(NULL, " "));
 
-	        printf("process_sync_client: filepath::[%s]\n", filepath);
-	        printf("process_sync_client: filename::[%s]\n", filename);
-	        printf("process_sync_client: filesize::[%s]\n", filesize);
+            char filepath[1024];
+            strcpy(filepath, folderpath);
+            strcat(filepath, filename);
 
-	        receive_one_file(sockfd, filepath, filename, atoi(filesize));
+            printf("process_sync_client: filepath::[%s]\n", filepath);
+            printf("process_sync_client: filename::[%s]\n", filename);
+            printf("process_sync_client: filesize::[%s]\n", filesize);
 
-	        free(filename);
-	        free(filesize);
-	    }
-	    else if(strcmp(arg1, "FIM") == 0)
-	    {
-	        break;
-	    }
-	}
+            receive_one_file(sockfd, filepath, filename, atoi(filesize));
 
-	printf("server sync FINALIZADO\n");
+            free(filename);
+            free(filesize);
+        }
+        else if(strcmp(arg1, "FIM") == 0)
+        {
+            break;
+        }
+    }
+
+    printf("server sync FINALIZADO\n");
 }
 
 int process_sync_client(const int sockfd, const char* buffer, int id)
 {
-	printf("process_sync_client(): iniciando...\n");
+    printf("process_sync_client(): iniciando...\n");
 
-	char message[BUFFER_SIZE];
-	int ret;
-	DIR* pDir;
+    char message[BUFFER_SIZE];
+    int ret;
+    DIR* pDir;
     struct dirent* pDirent;
 
 
@@ -528,98 +535,98 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
     // Envia todos arquivos
     pDir = opendir(folderpath);
     if (pDir == NULL) {
-    	printf("process_sync_client: opendir error :(\n");
+        printf("process_sync_client: opendir error :(\n");
         return -1;
     }
     while ((pDirent = readdir(pDir)) != NULL) {
         if(pDirent->d_type == DT_REG)
         {
-        	FILE* filefd;
-		    int data_read = 0;
-		    int remain_data = 0;
-        	char filepath[1024];
-        	char filename[512];
-        	char filesizes[512];
-        	int filesize;
-        	char message[BUFFER_SIZE];
+            FILE* filefd;
+            int data_read = 0;
+            int remain_data = 0;
+            char filepath[1024];
+            char filename[512];
+            char filesizes[512];
+            int filesize;
+            char message[BUFFER_SIZE];
 
 
-        	// Recebe pedido de um
-        	printf("Waiting client permission...\n");
-        	memset(buffer, 0, BUFFER_SIZE);
-        	recv(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
-			printf("process_sync_client(): recebido::%s\n", buffer);
+            // Recebe pedido de um
+            printf("Waiting client permission...\n");
+            memset(buffer, 0, BUFFER_SIZE);
+            recv(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
+            printf("process_sync_client(): recebido::%s\n", buffer);
 
 
-        	// Filepath
-        	strcpy(filename, pDirent->d_name);
-        	strcpy(filepath, folderpath);
-        	strcat(filepath, "/");
-        	strcat(filepath, filename);
-        	printf("process_sync_client(): filepath::%s\n", filepath);
+            // Filepath
+            strcpy(filename, pDirent->d_name);
+            strcpy(filepath, folderpath);
+            strcat(filepath, "/");
+            strcat(filepath, filename);
+            printf("process_sync_client(): filepath::%s\n", filepath);
 
-        	// Abre arquivo
-        	filefd = fopen (filepath, "rb");
-		    if (filefd == NULL) {
-		        printf("process_sync_client: fopen error :(\n");
-		        return -1;
-		    }
-		    printf("process_sync_client(): arquivo aberto\n");
-
-
-		    // Pega filesize
-		    fseek(filefd, 0L, SEEK_END);
-		    sprintf(filesizes, "%ld", ftell(filefd));
-		    rewind(filefd);
-		    remain_data = atoi(filesizes);
-		    filesize = atoi(filesizes);
-		    printf("process_sync_client(): filesize::%d\n",filesize);
+            // Abre arquivo
+            filefd = fopen (filepath, "rb");
+            if (filefd == NULL) {
+                printf("process_sync_client: fopen error :(\n");
+                return -1;
+            }
+            printf("process_sync_client(): arquivo aberto\n");
 
 
-		    // Envia FILE
-		    memset(message, 0, BUFFER_SIZE);
-		    strcpy(message, "FILE");
-		    strcat(message," ");
-		    strcat(message, filename);
-		    strcat(message," ");
-		    strcat(message, filesizes);
-		    ret = enviar(sockfd, message, BUFFER_SIZE, NULL);
-		    if(ret < 0)
-		    {
-		    	printf("process_sync_client: send error :(\n");
-		    }
-		    printf("process_sync_client(): enviado::%s\n",message);
+            // Pega filesize
+            fseek(filefd, 0L, SEEK_END);
+            sprintf(filesizes, "%ld", ftell(filefd));
+            rewind(filefd);
+            remain_data = atoi(filesizes);
+            filesize = atoi(filesizes);
+            printf("process_sync_client(): filesize::%d\n",filesize);
 
 
-		    // Envia arquivo
-		    memset(message, 0, BUFFER_SIZE);
-		    remain_data = atoi(filesizes);
-		    int j =0;
-		    while (remain_data > 0 && (data_read = fread(&message, 1, BUFFER_SIZE, filefd)) > 0)
-		    {
-		    	j++;
+            // Envia FILE
+            memset(message, 0, BUFFER_SIZE);
+            strcpy(message, "FILE");
+            strcat(message," ");
+            strcat(message, filename);
+            strcat(message," ");
+            strcat(message, filesizes);
+            ret = enviar(sockfd, message, BUFFER_SIZE, NULL);
+            if(ret < 0)
+            {
+                printf("process_sync_client: send error :(\n");
+            }
+            printf("process_sync_client(): enviado::%s\n",message);
 
-		        int data_sent = enviar(sockfd, message, data_read, NULL);
 
-		        remain_data -= data_sent;
+            // Envia arquivo
+            memset(message, 0, BUFFER_SIZE);
+            remain_data = atoi(filesizes);
+            int j =0;
+            while (remain_data > 0 && (data_read = fread(&message, 1, BUFFER_SIZE, filefd)) > 0)
+            {
+                j++;
 
-		        memset(message, 0, BUFFER_SIZE);
+                int data_sent = enviar(sockfd, message, data_read, NULL);
 
-		        printf("  dataread::%d data_sent::%d remaindata::%d filesize::%d j::%d \n", data_read, data_sent, remain_data, filesize, j);
-		    }
+                remain_data -= data_sent;
 
-		    printf("process_sync_client(): FINALIZADO\n");
-		    fclose(filefd);
+                memset(message, 0, BUFFER_SIZE);
+
+                printf("  dataread::%d data_sent::%d remaindata::%d filesize::%d j::%d \n", data_read, data_sent, remain_data, filesize, j);
+            }
+
+            printf("process_sync_client(): FINALIZADO\n");
+            fclose(filefd);
         }
     }
 
     closedir(pDir);
 
     // Espera client pedir mais um
-	printf("Waiting client permission...\n");
-	memset(buffer, 0, BUFFER_SIZE);
-	recv(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
-	printf("process_sync_client(): recebido::%s\n", buffer);
+    printf("Waiting client permission...\n");
+    memset(buffer, 0, BUFFER_SIZE);
+    recv(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
+    printf("process_sync_client(): recebido::%s\n", buffer);
 
     // Avisa que terminou
     memset(message, 0, BUFFER_SIZE);
@@ -761,6 +768,7 @@ int createAndListen(char* ip, int port)
         return -1;
     }
 
+    printf("[server] server is up, listening on %s:%d\n", inet_ntoa(sock_info.sin_addr), ntohs(sock_info.sin_port));
     return sock_number;
 }
 
@@ -807,14 +815,23 @@ int main()
     // Server
     int server_number;
 
+    char port[IP_SIZE];
+    char server_ip[IP_SIZE];
+    int server_port;
+
+    printf("[server] enter server ip: ");
+    scanf("%s", server_ip);
+
+    printf("[server] enter server port: ");
+    scanf("%s", port);
+    server_port = atoi(port);
 
     // Create, Bind, Listen
-    server_number = createAndListen(LISTEN_IP, LISTEN_PORT);
+    server_number = createAndListen(server_ip, server_port);
     if(server_number < 0)
     {
         printf("[server] server failed em iniciar\n");
     }
-    printf("[server] server iniciado com sucesso! ip=%s port=%d\n", LISTEN_IP, LISTEN_PORT);
 
 
     // Aceita clientes para sempre
@@ -858,7 +875,7 @@ int main()
             return -1;
         }
 
-        // 
+        //
         client_id++;
 
         // Respira kkk
