@@ -53,7 +53,6 @@ int receber(int s, char* b, int size, int flags)
     return r;
 }
 
-
 void texto(char* string, va_list argp)
 {
     printf(string, argp);
@@ -111,7 +110,7 @@ int get_command_from_buffer(const char* string)
 // void send_file(char *file);
 int process_upload(const int sockfd, const char* buffer)
 {
-    printf("[client] process_upload()\n");
+    printf("\nprocess_upload(): Hi\n");
 
     // Declara e Inicializa
     char message[BUFFER_SIZE];
@@ -169,23 +168,23 @@ int process_upload(const int sockfd, const char* buffer)
         j++;
         int data_sent = send(sockfd, message, data_read, NULL);
         remain_data -= data_sent;
-        // printf("  send[%d]: dataread::%d datasent::%d remaindata::%d filesize::%s\n", j, data_read, data_sent, remain_data, filesize);
+        printf("  process_upload(): j::%d dataread::%d datasent::%d remaindata::%d filesize::%s\n", j, data_read, data_sent, remain_data, filesize);
     }
+
+    memset(message, 0, BUFFER_SIZE);
+    recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
+
+    memset(message, 0, BUFFER_SIZE);
+    strcpy(message, "ACABOU FIM END");
+    send(sockfd, message, BUFFER_SIZE, NULL);
 
     // Limpa a sujeira
     fclose(filefd);
     free(copy);
+
+    printf("\nprocess_upload(): Bye\n");
 }
 
-/*
-* Recebe um arquivo do servidor
-
-[client] envia "download dog.jpg"
-[client] recebe "sending dog.jpg 115901"
-
-[client] recebe "binary data of file"
-
-*/
 // void receive_file(char *file);
 int process_download(const int sockfd, const char* buffer, char* username)
 {
@@ -520,98 +519,6 @@ int receive_one_file(int sockfd, char* filepath, char* filename, int filesize)
     fclose(filefd);
 }
 
-// Pega todos os arquivos do servidor
-int process_sync_client(const int sockfd, const char* buffer, char* username)
-{
-    // printf("process_sync_client(): iniciando\n", NULL);
-
-    int ret;
-
-
-    // Desativa inotify
-    pthread_mutex_lock(&lock);
-    shared_inotify_isenabled = 0;
-    pthread_mutex_unlock(&lock);
-
-
-    // Get home user folder
-    char folderpath[BUFFER_SIZE];
-    struct passwd* pw = getpwuid(getuid());
-    memset(folderpath, 0, BUFFER_SIZE);
-    strcpy(folderpath, pw->pw_dir);
-    strcat(folderpath, "/sync_dir_");
-    strcat(folderpath, username);
-    strcat(folderpath, "/");
-    // printf("process_sync_client(): homepath::%s\n", folderpath);
-
-
-    // Deleta tudo
-    deleteAllFiles(folderpath);
-    // printf("process_sync_client(): homepath files deleted\n", NULL);
-
-
-    // Envia comando para server
-    char message[BUFFER_SIZE];
-    memset(message, 0, BUFFER_SIZE);
-    strcpy(message, "syncclient");
-    strcat(message," ");
-    strcat(message,"arg1");
-    ret = enviar(sockfd, message, BUFFER_SIZE, NULL);
-    if(ret < 0)
-    {
-        printf("process_sync_client: send error\n", NULL);
-    }
-    // printf("process_sync_client(): enviando::%s\n",message);
-
-
-    // Recebe arquivos
-    while(1)
-    {
-
-
-        // Pede um
-        memset(message, 0, BUFFER_SIZE);
-        strcpy(message, "NEXT FILE");
-        enviar(sockfd, message, BUFFER_SIZE, NULL);
-        // printf("process_sync_client(): enviado::%s\n",message);
-
-
-        // Ganha um
-        memset(message, 0, BUFFER_SIZE);
-        ret = receber(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
-        // printf("process_sync_client(): recebido::%s\n",message);
-        char* arg1 = strdup(strtok(message, " "));
-
-
-        // Analisa
-        if(strcmp(arg1, "FILE") == 0)
-        {
-            char* filename = strdup(strtok(NULL, " "));
-            char* filesize = strdup(strtok(NULL, " "));
-
-            char filepath[1024];
-            strcpy(filepath, folderpath);
-            strcat(filepath, filename);
-
-            // printf("process_sync_client(): recebendo arquivo [%s] [%s bytes]\n", filename, filesize);
-
-            receive_one_file(sockfd, filepath, filename, atoi(filesize));
-
-            free(filename);
-            free(filesize);
-        }
-        else if(strcmp(arg1, "FIM") == 0)
-        {
-            break;
-        }
-    }
-
-    // Ativa inotify
-    pthread_mutex_lock(&lock);
-    shared_inotify_isenabled = 10;
-    pthread_mutex_unlock(&lock);
-}
-
 void* inotify_thread_function(void* thread_function_arg)
 {
     int i;
@@ -883,8 +790,109 @@ int conecta()
     return sockfd;
 }
 
+// Baixa todos os arquivos do servidor
+int process_sync_client(const int sockfd, const char* buffer, char* username)
+{
+	printf("\n process_sync_client(): Hi \n");
+
+    int ret;
+
+
+    // Desativa inotify
+    pthread_mutex_lock(&lock);
+    shared_inotify_isenabled = 0;
+    pthread_mutex_unlock(&lock);
+
+
+    // Get home user folder
+    char folderpath[BUFFER_SIZE];
+    struct passwd* pw = getpwuid(getuid());
+    memset(folderpath, 0, BUFFER_SIZE);
+    strcpy(folderpath, pw->pw_dir);
+    strcat(folderpath, "/sync_dir_");
+    strcat(folderpath, username);
+    strcat(folderpath, "/");
+    // printf("process_sync_client(): homepath::%s\n", folderpath);
+
+
+    // Deleta tudo
+    deleteAllFiles(folderpath);
+    // printf("process_sync_client(): homepath files deleted\n", NULL);
+
+
+    // Envia comando para server
+    char message[BUFFER_SIZE];
+    memset(message, 0, BUFFER_SIZE);
+    strcpy(message, "syncclient");
+    strcat(message," ");
+    strcat(message,"arg1");
+    ret = enviar(sockfd, message, BUFFER_SIZE, NULL);
+    if(ret < 0)
+    {
+        printf("process_sync_client: send error\n", NULL);
+    }
+    // printf("process_sync_client(): enviando::%s\n",message);
+
+
+    // Recebe arquivos
+    while(1)
+    {
+
+
+        // Pede um
+        memset(message, 0, BUFFER_SIZE);
+        strcpy(message, "NEXT FILE");
+        enviar(sockfd, message, BUFFER_SIZE, NULL);
+        // printf("process_sync_client(): enviado::%s\n",message);
+
+
+        // Ganha um
+        memset(message, 0, BUFFER_SIZE);
+        ret = receber(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
+        // printf("process_sync_client(): recebido::%s\n",message);
+        char* arg1 = strdup(strtok(message, " "));
+
+
+        // Analisa
+        if(strcmp(arg1, "FILE") == 0)
+        {
+        	printf("\n process_sync_client(): FILE START \n"); 
+
+            char* filename = strdup(strtok(NULL, " "));
+            char* filesize = strdup(strtok(NULL, " "));
+
+            char filepath[1024];
+            strcpy(filepath, folderpath);
+            strcat(filepath, filename);
+
+            // printf("process_sync_client(): recebendo arquivo [%s] [%s bytes]\n", filename, filesize);
+
+            receive_one_file(sockfd, filepath, filename, atoi(filesize));
+
+            free(filename);
+            free(filesize);
+
+            printf("\n process_sync_client(): FILE END \n");
+        }
+        else if(strcmp(arg1, "FIM") == 0)
+        {
+        	printf("\n process_sync_client(): FIM \n");
+            break;
+        }
+    }
+
+    // Ativa inotify
+    pthread_mutex_lock(&lock);
+    shared_inotify_isenabled = 10;
+    pthread_mutex_unlock(&lock);
+
+    printf("\n process_sync_client(): Bye \n");
+}
+
 int check_if_server_has_changed(int sockfd, char* username)
 {
+	printf("\n check_if_server_has_changed(): Hi \n");
+
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
     strcpy(buffer, "newfiles");
@@ -892,8 +900,7 @@ int check_if_server_has_changed(int sockfd, char* username)
     strcat(buffer, username);
     strcat(buffer, " ");
     strcat(buffer, "end");
-    printf("enviar: %s\n", buffer);
-    printf("enviandoooo\n");
+    printf("check_if_server_has_changed(): enviandooo::%s\n", buffer);
     if(enviar(sockfd, buffer, BUFFER_SIZE, 0)  < 0)
     {
         printf("[client] check_if_server_has_changed failed\n", NULL);
@@ -912,13 +919,15 @@ int check_if_server_has_changed(int sockfd, char* username)
     printf("recebeu: %s\n", command);
     if (strcmp(command, "NOTOK") == 0)
     {
-        printf("sincronizandooooo\n");
+        printf("check_if_server_has_changed: PRECISA SINCRONIZAR\n");
         return 3;
     }
     else if (strcmp(command, "OK") == 0)
     {
-        printf("segue o jogo\n");
+        printf("check_if_server_has_changed: NAO PRECISA SINCRONIZAR\n");
     }
+
+	printf("\n check_if_server_has_changed(): Bye \n");
 
     return 0;
 }
@@ -966,7 +975,6 @@ int main()
     while(1)
     {
 
-
         // Verifica se usuario modificou home folder
         if(shared_update)
         {
@@ -983,13 +991,14 @@ int main()
         // Verifica se servidor recebeu algum arquivo de outra instancia
         if(check_if_server_has_changed(sockfd, username) == 3)
         {
+        	// Download todos files do server
             process_sync_client(sockfd, buffer, username);
-            continue;
         }
 
         // Pega um comando do usuario e processa
         if(fill_buffer_with_command(buffer, BUFFER_SIZE) < 0)
         {
+        	// Tenta de novo
             continue;
         }
         switch(get_command_from_buffer(buffer))
