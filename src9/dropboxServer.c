@@ -51,7 +51,6 @@ struct client_info
     char username[USERNAME_SIZE];
     int new_files;
 };
-
 struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE ONE
 pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
 
@@ -85,6 +84,8 @@ void turnStringLowercase(char* string)
 
 int getCommand(const char* string)
 {
+	printf("\n getCommand(): Hi \n");
+
     char* copy = strdup(string);
     char* firstString = strtok(copy, " ");
 
@@ -133,12 +134,18 @@ int getCommand(const char* string)
 
     free(copy);
 
+    printf("\n getCommand(): Bye \n");
+
     return command;
 }
 
  // void receive_file(char *file);
+
+// client envia "upload dog.jpg"
 int process_recv(const int sockfd, const char* buffer, int id)
 {
+	printf("\nprocess_recv(): Hi\n");
+
     // Declara e Inicializa
     char message[BUFFER_SIZE];
 
@@ -176,6 +183,7 @@ int process_recv(const int sockfd, const char* buffer, int id)
     }
 
     // Recebe arquivo
+    memset(message, 0, BUFFER_SIZE);
     remain_data = atoi(filesize);
     int j = 0;
     while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, NULL)) > 0)
@@ -183,14 +191,25 @@ int process_recv(const int sockfd, const char* buffer, int id)
         int datawrite = fwrite(&message, 1, data_read, filefp);
         remain_data -= data_read;
         j++;
-        printf("  send[%d]: dataread::%d datawrite::%d remaindata::%d filesize::%s\n", j, data_read, datawrite, remain_data, filesize);
+        memset(message, 0, BUFFER_SIZE);
+
+        printf("  process_recv(): j::%d dataread::%d datawrite::%d remaindata::%d filesize::%s\n", j, data_read, datawrite, remain_data, filesize);
     }
-    printf("[server] Transfer completed\n");
+    printf("\nprocess_recv(): Upload complete\n");
+
+    memset(message, 0, BUFFER_SIZE);
+    strcpy(message, "ACABOU TUDO END");
+    send(sockfd, message, BUFFER_SIZE, NULL);
+
+    memset(message, 0, BUFFER_SIZE);
+    recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
 
     // Limpa a sujeira
     fclose(filefp);
     free(filepath);
     free(copy);
+
+    printf("\nprocess_recv(): Bye\n");
 }
 
 // void receive_file(char *file);
@@ -356,45 +375,6 @@ int process_hi(const int sockfd, const char* buffer, int id)
     enviar(sockfd, message, BUFFER_SIZE, NULL);
 }
 
-int process_newfiles(const int sockfd, const char* buffer, int id)
-{
-    char* copy = strdup(buffer);
-    printf("process_newfiles: buffer: %s\n", copy);
-    char* firstString = strtok(copy, " ");
-    char* username = strtok(NULL, " ");
-    printf("nome do usuario %s\n", username);
-
-    char message[BUFFER_SIZE];
-    memset(message, 0, BUFFER_SIZE);
-
-    int cmp;
-    int nf;
-    int cid;
-    char* user;
-
-    int i = 0;
-    for (i = 0; i < NUM_MAX_CLIENT; ++i)
-    {
-        pthread_mutex_lock(&lock);
-        nf = client_info_array[i].new_files;
-        cid = client_info_array[i].client_id;
-        user = strdup(client_info_array[i].username);
-        pthread_mutex_unlock(&lock);
-        cmp = strcmp(user, username);
-        if (cmp == 0 && cid != id && nf == 1)
-        {
-        printf("VAMO SYNC\n");
-        strcpy(message, "NOTOK");
-        enviar(sockfd, message, BUFFER_SIZE, NULL);
-        }
-    }
-    printf("nao vamo sync\n");
-    strcpy(message, "OK");
-    enviar(sockfd, message, BUFFER_SIZE, NULL);
-
-    return 0;
-}
-
 int process_list(const int sockfd, const char* buffer, int id)
 {
     char pString[BUFFER_SIZE];
@@ -558,6 +538,94 @@ int process_sync_server(const int sockfd, const char* buffer, int id)
     printf("server sync FINALIZADO\n");
 }
 
+int createAndListen(char* ip, int port)
+{
+    // Server socket
+    struct sockaddr_in sock_info;
+    int sock_number;
+    int bind_number;
+    int listen_number;
+
+    // Reseta estrutura que hold data dos clientes
+    pthread_mutex_lock(&lock);
+    int i;
+    for(i=0; i<NUM_MAX_CLIENT; i++)
+    {
+        client_info_array[i].client_id = -1;
+        client_info_array[i].isActive = -1;
+        memset(client_info_array[i].folderPath, 0, PATH_SIZE);
+        memset(client_info_array[i].username, 0, USERNAME_SIZE);
+    }
+    pthread_mutex_unlock(&lock);
+
+    // Fill sockaddr_in structure
+    sock_info.sin_family = AF_INET;
+    sock_info.sin_addr.s_addr = inet_addr(ip);
+    sock_info.sin_port = htons(port);
+
+    // Create socket
+    sock_number = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_number == -1)
+    {
+        printf("[server] socket failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
+        return -1;
+    }
+
+    // Bind
+    bind_number = bind(sock_number, (struct sockaddr*) &sock_info, sizeof(sock_info));
+    if (bind_number < 0)
+    {
+        printf("[server] bind failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
+        return -1;
+    }
+
+    // Listen
+    listen_number = listen(sock_number , 5);
+    if(listen_number < 0)
+    {
+        printf("[server] listen failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
+        return -1;
+    }
+
+    printf("[server] server is up, listening on %s:%d\n", inet_ntoa(sock_info.sin_addr), ntohs(sock_info.sin_port));
+    return sock_number;
+}
+
+int closeClient(int client_id)
+{
+    // Limpa struct
+    pthread_mutex_lock(&lock);
+    client_info_array[client_id].client_id = -1;
+    memset(client_info_array[client_id].folderPath, 0, PATH_SIZE);
+    memset(client_info_array[client_id].username, 0, USERNAME_SIZE);
+    client_info_array[client_id].isActive = -1;
+    pthread_mutex_unlock(&lock);
+}
+
+int findSlotId()
+{
+    int client_id = -1;
+
+    pthread_mutex_lock(&lock);
+    int i;
+    for(i=0; i<NUM_MAX_CLIENT; i++)
+    {
+        printf("[server] slot [%d] = %d\n",i,client_info_array[i].isActive);
+    }
+    for(i=0; i<NUM_MAX_CLIENT; i++)
+    {
+        if(client_info_array[i].isActive == -1)
+        {
+            client_info_array[i].isActive = 0;
+            client_id = i;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+
+    return client_id;
+}
+
 int process_sync_client(const int sockfd, const char* buffer, int id)
 {
     // printf("process_sync_client(): iniciando...\n");
@@ -682,6 +750,56 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
     free(folderpath);
 }
 
+int process_newfiles(const int sockfd, const char* buffer, int id)
+{
+	printf("\n process_newfiles(): Hi \n");
+
+    char* copy = strdup(buffer);
+    printf("1 process_newfiles(): buffer: %s\n", copy);
+    char* firstString = strtok(copy, " ");
+    char* username = strtok(NULL, " ");
+    printf("2 process_newfiles(): nome do usuario %s\n", username);
+
+    char message[BUFFER_SIZE];
+    memset(message, 0, BUFFER_SIZE);
+
+    int cmp;
+    int nf;
+    int cid;
+    char* user;
+    int i = 0;
+
+    // Procura pelo usuario
+    for (i = 0; i < NUM_MAX_CLIENT; ++i)
+    {
+
+        pthread_mutex_lock(&lock);
+        nf = client_info_array[i].new_files;
+        cid = client_info_array[i].client_id;
+        user = strdup(client_info_array[i].username);
+        pthread_mutex_unlock(&lock);
+
+        // Avisa para sincronizar NOTOK
+        cmp = strcmp(user, username);
+        if (cmp == 0 && cid != id && nf == 1)
+        {
+	        printf("3 process_newfiles(): VAMO SYNC\n");
+	        strcpy(message, "NOTOK");
+	        enviar(sockfd, message, BUFFER_SIZE, NULL);
+	        return 0;
+        }
+    }
+
+    // Avisa para nao sincronizar OK
+    printf("4 process_newfiles(): nao vamo sync\n");
+    strcpy(message, "OK");
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
+
+    printf("\n process_newfiles(): Bye \n");
+
+    return 0;
+}
+
 void* thread_function(void* thread_function_arg)
 {
     // Client
@@ -709,6 +827,9 @@ void* thread_function(void* thread_function_arg)
 
     while ((read_size = recv(client_number, buffer, BUFFER_SIZE, MSG_WAITALL)) > 0)
     {
+
+    	printf("\n\n CLIENT COMMAND:[%s]\n\n",buffer);
+
         switch(getCommand(buffer))
         {
             case CMD_HI:
@@ -765,94 +886,6 @@ void* thread_function(void* thread_function_arg)
     closeClient(client_id);
 
     return 0;
-}
-
-int createAndListen(char* ip, int port)
-{
-    // Server socket
-    struct sockaddr_in sock_info;
-    int sock_number;
-    int bind_number;
-    int listen_number;
-
-    // Reseta estrutura que hold data dos clientes
-    pthread_mutex_lock(&lock);
-    int i;
-    for(i=0; i<NUM_MAX_CLIENT; i++)
-    {
-        client_info_array[i].client_id = -1;
-        client_info_array[i].isActive = -1;
-        memset(client_info_array[i].folderPath, 0, PATH_SIZE);
-        memset(client_info_array[i].username, 0, USERNAME_SIZE);
-    }
-    pthread_mutex_unlock(&lock);
-
-    // Fill sockaddr_in structure
-    sock_info.sin_family = AF_INET;
-    sock_info.sin_addr.s_addr = inet_addr(ip);
-    sock_info.sin_port = htons(port);
-
-    // Create socket
-    sock_number = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock_number == -1)
-    {
-        printf("[server] socket failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
-        return -1;
-    }
-
-    // Bind
-    bind_number = bind(sock_number, (struct sockaddr*) &sock_info, sizeof(sock_info));
-    if (bind_number < 0)
-    {
-        printf("[server] bind failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
-        return -1;
-    }
-
-    // Listen
-    listen_number = listen(sock_number , 5);
-    if(listen_number < 0)
-    {
-        printf("[server] listen failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
-        return -1;
-    }
-
-    printf("[server] server is up, listening on %s:%d\n", inet_ntoa(sock_info.sin_addr), ntohs(sock_info.sin_port));
-    return sock_number;
-}
-
-int closeClient(int client_id)
-{
-    // Limpa struct
-    pthread_mutex_lock(&lock);
-    client_info_array[client_id].client_id = -1;
-    memset(client_info_array[client_id].folderPath, 0, PATH_SIZE);
-    memset(client_info_array[client_id].username, 0, USERNAME_SIZE);
-    client_info_array[client_id].isActive = -1;
-    pthread_mutex_unlock(&lock);
-}
-
-int findSlotId()
-{
-    int client_id = -1;
-
-    pthread_mutex_lock(&lock);
-    int i;
-    for(i=0; i<NUM_MAX_CLIENT; i++)
-    {
-        printf("[server] slot [%d] = %d\n",i,client_info_array[i].isActive);
-    }
-    for(i=0; i<NUM_MAX_CLIENT; i++)
-    {
-        if(client_info_array[i].isActive == -1)
-        {
-            client_info_array[i].isActive = 0;
-            client_id = i;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&lock);
-
-    return client_id;
 }
 
 int main()
