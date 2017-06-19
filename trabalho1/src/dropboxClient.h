@@ -23,4 +23,4 @@ int deleteAllFiles(char* folderpath);
 int fill_buffer_with_command(char* buffer, int size);
 int process_sync_server();
 int process_sync_client();
-int create_sync_inotify_home_folder();
+int inotify_thread_function();
