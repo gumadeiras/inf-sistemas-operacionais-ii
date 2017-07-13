@@ -247,24 +247,24 @@ int process_download(const int sockfd, const char* buffer, char* username)
     }
 
     // Homepath
-    struct passwd* pw = getpwuid(getuid());
-    char* homedir = strdup(pw->pw_dir);
-    syncpath = malloc(BUFFER_SIZE);
-    memset(syncpath, 0, BUFFER_SIZE);
-    strcpy(syncpath, homedir);
-    strcat(syncpath, "/sync_dir_");
-    strcat(syncpath, username);
-    strcat(syncpath, "/");
-    if(mkdir(syncpath, 0700) < 0)
-    {
-        printf("[client] mkdir error (pasta ja existe) (errstr=%s) (errno=%d)\n", strerror(errno), errno);
-    }
+    // struct passwd* pw = getpwuid(getuid());
+    // char* homedir = strdup(pw->pw_dir);
+    // syncpath = malloc(BUFFER_SIZE);
+    // memset(syncpath, 0, BUFFER_SIZE);
+    // strcpy(syncpath, homedir);
+    // strcat(syncpath, "/sync_dir_");
+    // strcat(syncpath, username);
+    // strcat(syncpath, "/");
+    // if(mkdir(syncpath, 0700) < 0)
+    // {
+    //     printf("[client] mkdir error (pasta ja existe) (errstr=%s) (errno=%d)\n", strerror(errno), errno);
+    // }
 
     // Filepath
     // printf("%s\n", username);
     filepath = malloc(BUFFER_SIZE);
     memset(filepath, 0, BUFFER_SIZE);
-    strcpy(filepath, syncpath);
+    strcpy(filepath, "./");
     strcat(filepath, filename);
     // printf("FILEPATH: %s\n", filepath);
 

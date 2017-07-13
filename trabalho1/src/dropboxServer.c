@@ -786,7 +786,7 @@ int process_newfiles(const int sockfd, const char* buffer, int id)
             pthread_mutex_lock(&lock);
             client_info_array[i].new_files = 0;
             pthread_mutex_unlock(&lock);
-            printf("3 process_newfiles(): VAMO SYNC\n");
+            // printf("3 process_newfiles(): VAMO SYNC\n");
             strcpy(message, "NOTOK");
             enviar(sockfd, message, BUFFER_SIZE, NULL);
             return 0;
@@ -794,7 +794,7 @@ int process_newfiles(const int sockfd, const char* buffer, int id)
     }
 
     // Avisa para nao sincronizar OK
-    printf("4 process_newfiles(): nao vamo sync\n");
+    // printf("4 process_newfiles(): nao vamo sync\n");
     strcpy(message, "OK");
     enviar(sockfd, message, BUFFER_SIZE, NULL);
 
