@@ -53,12 +53,12 @@ struct client_info
     char isActive;
     char username[USERNAME_SIZE];
     int new_files;
+    SSL *ssl;
 };
 struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE ONE
 pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
-SSL *ssl;
 
-int enviar(int s, char* b, int size, int flags)
+int enviar(SSL *ssl, char* b, int size, int flags)
 {
     // int r = send(s, b, size, flags);
     int r = SSL_write(ssl, b, size);
@@ -66,7 +66,7 @@ int enviar(int s, char* b, int size, int flags)
     return r;
 }
 
-int receber(int s, char* b, int size, int flags)
+int receber(SSL *ssl, char* b, int size, int flags)
 {
     // int r = recv(s, b, size, flags);
     int r = SSL_read(ssl, b, size);
@@ -97,6 +97,7 @@ int getCommand(const char* string)
 
     int command = CMD_ERROR;
 
+    printf("getCommand:%s\n", firstString);
     turnStringLowercase(firstString);
 
     if (strcmp(firstString, "hi") == 0)
@@ -148,7 +149,7 @@ int getCommand(const char* string)
  // void receive_file(char *file);
 
 // client envia "upload dog.jpg"
-int process_recv(const int sockfd, const char* buffer, int id)
+int process_recv(SSL *sockfd, const char* buffer, int id)
 {
     printf("\nprocess_recv(): Hi\n");
 
@@ -192,7 +193,7 @@ int process_recv(const int sockfd, const char* buffer, int id)
     memset(message, 0, BUFFER_SIZE);
     remain_data = atoi(filesize);
     int j = 0;
-    while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, NULL)) > 0)
+    while (remain_data > 0 && (data_read = receber(sockfd, message, BUFFER_SIZE, NULL)) > 0)
     {
         int datawrite = fwrite(&message, 1, data_read, filefp);
         remain_data -= data_read;
@@ -205,10 +206,10 @@ int process_recv(const int sockfd, const char* buffer, int id)
 
     memset(message, 0, BUFFER_SIZE);
     strcpy(message, "ACABOU TUDO END");
-    send(sockfd, message, BUFFER_SIZE, NULL);
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
 
     memset(message, 0, BUFFER_SIZE);
-    recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
+    receber(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
 
     // Limpa a sujeira
     fclose(filefp);
@@ -219,7 +220,7 @@ int process_recv(const int sockfd, const char* buffer, int id)
 }
 
 // void receive_file(char *file);
-int process_send(const int sockfd, const char* buffer, int id)
+int process_send(SSL *sockfd, const char* buffer, int id)
 {
     // Declara e Inicializa
     char message[BUFFER_SIZE];
@@ -254,7 +255,7 @@ int process_send(const int sockfd, const char* buffer, int id)
         printf("[server] file not found\n");
         memset(message, 0, BUFFER_SIZE);
         strcpy(message, "ERROR FILE NOT FOUND");
-        write(sockfd, message, BUFFER_SIZE);
+        enviar(sockfd, message, BUFFER_SIZE, NULL);
         return -1;
     }
 
@@ -280,7 +281,7 @@ int process_send(const int sockfd, const char* buffer, int id)
     int j = 0;
     while (remain_data > 0 && (data_read = fread(&message, 1, BUFFER_SIZE, filefd)) > 0)
     {
-        int data_sent = send(sockfd, message, data_read, NULL);
+        int data_sent = enviar(sockfd, message, data_read, NULL);
         remain_data -= data_sent;
         memset(message, 0, BUFFER_SIZE);
         j++;
@@ -292,11 +293,10 @@ int process_send(const int sockfd, const char* buffer, int id)
     free(filepath);
 }
 
-int process_username(const int sockfd, const char* buffer, int id)
+int process_username(SSL *sockfd, const char* buffer, int id)
 {
     char message[BUFFER_SIZE];
     struct stat st = {0};
-
     char* copy;
     char* command;
     char* username;
@@ -305,6 +305,8 @@ int process_username(const int sockfd, const char* buffer, int id)
     copy = strdup(buffer);
     command = strdup(strtok(copy, " "));
     username =  strdup(strtok(NULL, " "));
+    printf(";;;;;%s\n", command);
+    printf(";;;;;%s\n", username);
 
     char* syncpath;
     struct passwd* pw = getpwuid(getuid());
@@ -342,7 +344,7 @@ int process_username(const int sockfd, const char* buffer, int id)
         memset(message, 0, BUFFER_SIZE);
         strcpy(message, "NOTOK");
         closeClient(id);
-        write(sockfd, message, BUFFER_SIZE);
+        enviar(sockfd, message, BUFFER_SIZE, NULL);
 
         return;
     }
@@ -355,7 +357,7 @@ int process_username(const int sockfd, const char* buffer, int id)
         memset(message, 0, BUFFER_SIZE);
         strcpy(message, "SERVER");
         closeClient(id);
-        write(sockfd, message, BUFFER_SIZE);
+        enviar(sockfd, message, BUFFER_SIZE, NULL);
         return;
     }
 
@@ -367,13 +369,13 @@ int process_username(const int sockfd, const char* buffer, int id)
     // Envia ok
     memset(message, 0, BUFFER_SIZE);
     strcpy(message, "OK");
-    write(sockfd, message, BUFFER_SIZE);
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
 
     // Limpa sujeira
     free(folder);
 }
 
-int process_hi(const int sockfd, const char* buffer, int id)
+int process_hi(SSL *sockfd, const char* buffer, int id)
 {
     char message[BUFFER_SIZE];
     memset(message, 0, BUFFER_SIZE);
@@ -381,7 +383,7 @@ int process_hi(const int sockfd, const char* buffer, int id)
     enviar(sockfd, message, BUFFER_SIZE, NULL);
 }
 
-int process_list(const int sockfd, const char* buffer, int id)
+int process_list(SSL *sockfd, const char* buffer, int id)
 {
     char pString[BUFFER_SIZE];
     char* folderpath;
@@ -400,7 +402,7 @@ int process_list(const int sockfd, const char* buffer, int id)
     if (pDir == NULL) {
         memset(pString, 0, BUFFER_SIZE);
         strcpy(pString, "ERROR DIR NOT FOUND");
-        write(sockfd, pString, BUFFER_SIZE);
+        enviar(sockfd, pString, BUFFER_SIZE, NULL);
         return -1;
     }
 
@@ -415,17 +417,17 @@ int process_list(const int sockfd, const char* buffer, int id)
 
     closedir(pDir);
 
-    write(sockfd, pString, BUFFER_SIZE);
+    enviar(sockfd, pString, BUFFER_SIZE, NULL);
 
     free(folderpath);
 }
 
-int process_error(const int sockfd, const char* buffer, int id)
+int process_error(SSL *sockfd, const char* buffer, int id)
 {
     char message[BUFFER_SIZE];
     memset(message, 0, BUFFER_SIZE);
     strcpy(message, "ERROR COMMAND NOT FOUND");
-    write(sockfd, message, BUFFER_SIZE);
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
 }
 
 int deleteAllFiles(char* folderpath)
@@ -443,7 +445,7 @@ int deleteAllFiles(char* folderpath)
     closedir(folder);
 }
 
-int receive_one_file(int sockfd, char* filepath, char* filename, int filesize)
+int receive_one_file(SSL *sockfd, char* filepath, char* filename, int filesize)
 {
     printf("receive_one_file hi\n");
 
@@ -468,7 +470,7 @@ int receive_one_file(int sockfd, char* filepath, char* filename, int filesize)
 
     int j =0;
 
-    while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, NULL)) > 0)
+    while (remain_data > 0 && (data_read = receber(sockfd, message, BUFFER_SIZE, NULL)) > 0)
     {
         int data_write = fwrite(&message, 1, data_read, filefd);
 
@@ -486,10 +488,10 @@ int receive_one_file(int sockfd, char* filepath, char* filename, int filesize)
     printf("transfer done\n");
 
     // clean
-    //recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
+    //receber(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
 }
 
-int process_sync_server(const int sockfd, const char* buffer, int id)
+int process_sync_server(SSL *sockfd, const char* buffer, int id)
 {
     int ret = 0;
 
@@ -514,8 +516,10 @@ int process_sync_server(const int sockfd, const char* buffer, int id)
         ret = enviar(sockfd, message, BUFFER_SIZE, NULL);
 
         memset(message, 0, BUFFER_SIZE);
-        ret = recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
+        ret = receber(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
+        printf("1 ERRO AQUI : %s\n", message);
         char* arg1 = strdup(strtok(message, " "));
+        printf("2\n");
 
         if(strcmp(arg1, "FILE") == 0)
         {
@@ -531,7 +535,6 @@ int process_sync_server(const int sockfd, const char* buffer, int id)
             // printf("process_sync_client: filesize::[%s]\n", filesize);
 
             receive_one_file(sockfd, filepath, filename, atoi(filesize));
-
             free(filename);
             free(filesize);
         }
@@ -632,7 +635,7 @@ int findSlotId()
     return client_id;
 }
 
-int process_sync_client(const int sockfd, const char* buffer, int id)
+int process_sync_client(SSL *sockfd, const char* buffer, int id)
 {
     // printf("process_sync_client(): iniciando...\n");
 
@@ -672,7 +675,7 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
             // Recebe pedido de um
             // printf("Waiting client permission...\n");
             memset(buffer, 0, BUFFER_SIZE);
-            recv(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
+            receber(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
             // printf("process_sync_client(): recebido::%s\n", buffer);
 
 
@@ -743,20 +746,20 @@ int process_sync_client(const int sockfd, const char* buffer, int id)
     // Espera client pedir mais um
     // printf("Waiting client permission...\n");
     memset(buffer, 0, BUFFER_SIZE);
-    recv(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
+    receber(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL);
     // printf("process_sync_client(): recebido::%s\n", buffer);
 
     // Avisa que terminou
     memset(message, 0, BUFFER_SIZE);
     strcpy(message, "FIM A B C D");
-    write(sockfd, message, BUFFER_SIZE);
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
     // printf("process_sync_client(): enviado FIM::%s\n", message);
 
 
     free(folderpath);
 }
 
-int process_newfiles(const int sockfd, const char* buffer, int id)
+int process_newfiles(SSL *sockfd, const char* buffer, int id)
 {
     printf("\n process_newfiles(): Hi \n");
 
@@ -815,6 +818,7 @@ void* thread_function(void* thread_function_arg)
     int client_id;
     struct sockaddr_in client_addr;
     int client_number;
+    SSL *client_ssl;
 
     // Communication
     char buffer[BUFFER_SIZE];
@@ -828,53 +832,54 @@ void* thread_function(void* thread_function_arg)
     pthread_mutex_lock(&lock);
     client_addr = client_info_array[client_id].client_info;
     client_number = client_info_array[client_id].client_number;
+    client_ssl = client_info_array[client_id].ssl;
     pthread_mutex_unlock(&lock);
 
 
     // Recebe comando do cliente
     memset(buffer, 0, BUFFER_SIZE);
 
-    while ((read_size = recv(client_number, buffer, BUFFER_SIZE, MSG_WAITALL)) > 0)
+    while ((read_size = receber(client_ssl, buffer, BUFFER_SIZE, MSG_WAITALL)) > 0)
     {
 
-        printf("\n\n CLIENT COMMAND:[%s]\n\n",buffer);
+        printf("\n\n CLIENT COMMAND:[%s]\n\n", buffer);
 
         switch(getCommand(buffer))
         {
             case CMD_HI:
-                process_hi(client_number, buffer, client_id);
+                process_hi(client_ssl, buffer, client_id);
             break;
 
             case CMD_USERNAME:
-                process_username(client_number, buffer, client_id);
+                process_username(client_ssl, buffer, client_id);
             break;
 
             case CMD_LIST:
-                process_list(client_number, buffer, client_id);
+                process_list(client_ssl, buffer, client_id);
             break;
 
             case CMD_RECV:
-                process_recv(client_number, buffer, client_id);
+                process_recv(client_ssl, buffer, client_id);
             break;
 
             case CMD_SEND:
-                process_send(client_number, buffer, client_id);
+                process_send(client_ssl, buffer, client_id);
             break;
 
             case CMD_SYNC_CLIENT:
-                process_sync_client(client_number, buffer, client_id);
+                process_sync_client(client_ssl, buffer, client_id);
             break;
 
             case CMD_SYNC_SERVER:
-                process_sync_server(client_number, buffer, client_id);
+                process_sync_server(client_ssl, buffer, client_id);
             break;
 
             case CMD_NEWFILES:
-                process_newfiles(client_number, buffer, client_id);
+                process_newfiles(client_ssl, buffer, client_id);
             break;
 
             default:
-                process_error(client_number, buffer, client_id);
+                process_error(client_ssl, buffer, client_id);
             break;
         }
 
@@ -992,40 +997,38 @@ int main()
             return -1;
         }
 
-        // create and set SSL context
-        ssl = SSL_new(ctx);
-        SSL_set_fd(ssl, client_number);
-
-        if ( SSL_accept(ssl) == -1 )
-            ERR_print_errors_fp(stderr);
-        else
-        {
-            X509 *cert;
-            char *line;
-
-            cert = SSL_get_peer_certificate(ssl);
-            if ( cert != NULL )
-            {
-                printf("[server] Server certificates:\n");
-                line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
-                printf("[server] Subject: %s\n", line);
-                free(line);
-                line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
-                printf("[server] Issuer: %s\n", line);
-                free(line);
-                X509_free(cert);
-            }
-            else
-                printf("[server] No certificates.\n");
-        }
 
         // Seta client info
         pthread_mutex_lock(&lock);
         client_info_array[client_id].client_id = client_id;
         client_info_array[client_id].client_number = client_number;
         client_info_array[client_id].client_info = client_info;
+        // create and set SSL context
+        client_info_array[client_id].ssl = SSL_new(ctx);
+        SSL_set_fd(client_info_array[client_id].ssl, client_number);
+        if ( SSL_accept(client_info_array[client_id].ssl) == -1 )
+            ERR_print_errors_fp(stderr);
         pthread_mutex_unlock(&lock);
+        // else
+        // {
+        //     X509 *cert;
+        //     char *line;
 
+        //     cert = SSL_get_peer_certificate(ssl);
+        //     if ( cert != NULL )
+        //     {
+        //         printf("[server] Server certificates:\n");
+        //         line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+        //         printf("[server] Subject: %s\n", line);
+        //         free(line);
+        //         line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+        //         printf("[server] Issuer: %s\n", line);
+        //         free(line);
+        //         X509_free(cert);
+        //     }
+        //     else
+        //         printf("[server] No certificates.\n");
+        // }
 
         // Inicia thread
         threadfd = pthread_create(&mypthreads[client_id], NULL, thread_function, (void*) client_id);

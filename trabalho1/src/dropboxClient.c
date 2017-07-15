@@ -489,7 +489,7 @@ int process_sync_server(int sockfd, char* username)
     // Avisa que terminou
     memset(message, 0, BUFFER_SIZE);
     strcpy(message, "FIM A B C D");
-    write(sockfd, message, BUFFER_SIZE);
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
 
     // printf("get_sync_dir FINALIZADO\n", NULL);
 }
@@ -778,7 +778,7 @@ int conecta()
     memset(buffer, 0, BUFFER_SIZE);
     if(receber(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL) < 0)
     {
-        printf("[client] recv failed\n", NULL);
+        printf("[client] HI recv failed\n", NULL);
         return 1;
     }
 
@@ -802,7 +802,7 @@ int conecta()
     memset(buffer, 0, BUFFER_SIZE);
     if( receber(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL) < 0)
     {
-        printf("[client] recv failed.\n", NULL);
+        printf("[client] USERNAME recv failed.\n", NULL);
         return 1;
     }
 
@@ -1126,7 +1126,7 @@ int main()
                 memset(buffer, 0, BUFFER_SIZE);
                 if( receber(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL) < 0)
                 {
-                    printf("[client] recv failed\n", NULL);
+                    printf("[client] GET_COMMAND_FROM_BUFFER recv failed\n", NULL);
                     return 1;
                 }
                 printf("[client] server response:\n%s\\\n", buffer);
