@@ -42,17 +42,20 @@ char shared_username[256];
 int shared_socket;
 pthread_mutex_t lock;
 int shared_inotify_isenabled = 10;
+SSL *ssl;
 
 int enviar(int s, char* b, int size, int flags)
 {
-    int r = send(s, b, size, flags);
+    // int r = send(s, b, size, flags);
+    int r = SSL_write(ssl, b, size);
     // printf("********************** [client-sent] %s\n", b);
     return r;
 }
 
 int receber(int s, char* b, int size, int flags)
 {
-    int r = recv(s, b, size, flags);
+    // int r = recv(s, b, size, flags);
+    int r = SSL_read(ssl, b, size);
     // printf("********************** [client-received] %s\n", b);
     return r;
 }
@@ -170,17 +173,17 @@ int process_upload(const int sockfd, const char* buffer)
     while (remain_data > 0 && (data_read = fread(&message, 1, BUFFER_SIZE, filefd)) > 0)
     {
         j++;
-        int data_sent = send(sockfd, message, data_read, NULL);
+        int data_sent = enviar(sockfd, message, data_read, NULL);
         remain_data -= data_sent;
         printf("  process_upload(): j::%d dataread::%d datasent::%d remaindata::%d filesize::%s\n", j, data_read, data_sent, remain_data, filesize);
     }
 
     memset(message, 0, BUFFER_SIZE);
-    recv(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
+    receber(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
 
     memset(message, 0, BUFFER_SIZE);
     strcpy(message, "ACABOU FIM END");
-    send(sockfd, message, BUFFER_SIZE, NULL);
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
 
     // Limpa a sujeira
     fclose(filefd);
@@ -281,13 +284,13 @@ int process_download(const int sockfd, const char* buffer, char* username)
     // Recebe arquivo
     memset(message, 0, BUFFER_SIZE);
     int j = 0;
-    while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, NULL)) > 0)
+    while (remain_data > 0 && (data_read = receber(sockfd, message, BUFFER_SIZE, NULL)) > 0)
     {
         int data_write = fwrite(&message, 1, data_read, filefd);
         remain_data -= data_read;
         memset(message, 0, BUFFER_SIZE);
         j++;
-        // printf("  recebendo[%d]: recv()::%d fwrite()::%d remaindata::%d filesize::%s\n", j, data_read, data_write, remain_data, filesize);
+        // printf("  recebendo[%d]: receber()::%d fwrite()::%d remaindata::%d filesize::%s\n", j, data_read, data_write, remain_data, filesize);
     }
 
     // Limpa a sujeira
@@ -465,7 +468,7 @@ int process_sync_server(int sockfd, char* username)
             {
                 j++;
 
-                int data_sent = send(sockfd, message, data_read, NULL);
+                int data_sent = enviar(sockfd, message, data_read, NULL);
 
                 remain_data -= data_sent;
 
@@ -507,7 +510,7 @@ int receive_one_file(int sockfd, char* filepath, char* filename, int filesize)
 
     memset(message, 0, BUFFER_SIZE);
     int j = 0;
-    while (remain_data > 0 && (data_read = recv(sockfd, message, BUFFER_SIZE, NULL)) > 0)
+    while (remain_data > 0 && (data_read = receber(sockfd, message, BUFFER_SIZE, NULL)) > 0)
     {
         int data_write = fwrite(&message, 1, data_read, filefd);
 
@@ -732,7 +735,6 @@ int conecta()
 
     SSL_METHOD *method;
     SSL_CTX *ctx;
-    SSL *ssl;
     method = SSLv23_client_method();
     ctx = SSL_CTX_new(method);
     if (ctx == NULL) {
@@ -774,7 +776,7 @@ int conecta()
 
     // Recebe HI
     memset(buffer, 0, BUFFER_SIZE);
-    if( receber(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL) < 0)
+    if(receber(sockfd, buffer, BUFFER_SIZE, MSG_WAITALL) < 0)
     {
         printf("[client] recv failed\n", NULL);
         return 1;

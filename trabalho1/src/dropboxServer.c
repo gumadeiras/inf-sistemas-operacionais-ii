@@ -56,17 +56,20 @@ struct client_info
 };
 struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE ONE
 pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
+SSL *ssl;
 
 int enviar(int s, char* b, int size, int flags)
 {
-    int r = send(s, b, size, flags);
+    // int r = send(s, b, size, flags);
+    int r = SSL_write(ssl, b, size);
     printf("[client-sent] %s\n", b);
     return r;
 }
 
 int receber(int s, char* b, int size, int flags)
 {
-    int r = recv(s, b, size, flags);
+    // int r = recv(s, b, size, flags);
+    int r = SSL_read(ssl, b, size);
     printf("[client-received] %s\n", b);
     return r;
 }
@@ -908,7 +911,6 @@ int main()
 
     SSL_METHOD *method;
     SSL_CTX *ctx;
-    SSL *ssl;
 
     printf("[server] enter server ip: ");
     scanf("%s", server_ip);
