@@ -305,8 +305,6 @@ int process_username(SSL *sockfd, const char* buffer, int id)
     copy = strdup(buffer);
     command = strdup(strtok(copy, " "));
     username =  strdup(strtok(NULL, " "));
-    printf(";;;;;%s\n", command);
-    printf(";;;;;%s\n", username);
 
     char* syncpath;
     struct passwd* pw = getpwuid(getuid());
@@ -517,9 +515,9 @@ int process_sync_server(SSL *sockfd, const char* buffer, int id)
 
         memset(message, 0, BUFFER_SIZE);
         ret = receber(sockfd, message, BUFFER_SIZE, MSG_WAITALL);
-        printf("1 ERRO AQUI : %s\n", message);
+
         char* arg1 = strdup(strtok(message, " "));
-        printf("2\n");
+
 
         if(strcmp(arg1, "FILE") == 0)
         {
