@@ -19,6 +19,9 @@
 #include <linux/inotify.h>
 #include <pthread.h>
 #include <pwd.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
 
 #define BUFFER_SIZE 1024
 #define USERNAME_SIZE 100
@@ -722,6 +725,43 @@ int conecta()
     }
 
     shared_socket = sockfd;
+
+    SSL_library_init();
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+
+    SSL_METHOD *method;
+    SSL_CTX *ctx;
+    SSL *ssl;
+    method = SSLv23_client_method();
+    ctx = SSL_CTX_new(method);
+    if (ctx == NULL) {
+        ERR_print_errors_fp(stderr);
+        abort();
+    }
+
+    ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, shared_socket);
+    if (SSL_connect(ssl) == -1)
+        ERR_print_errors_fp(stderr);
+    else {
+        //GG
+        X509 *cert;
+        char *line;
+        cert = SSL_get_peer_certificate(ssl);
+        if (cert != NULL) {
+            printf("[client] Client certificates:\n");
+            line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+            printf("[client] Subject: %s\n", line);
+            free(line);
+            line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+            printf("[client] Issuer: %s\n", line);
+            free(line);
+            X509_free(cert);
+        }
+        else
+            printf("[client] No certificates.\n");
+    }
 
     // Envia HI
     memset(buffer, 0, BUFFER_SIZE);

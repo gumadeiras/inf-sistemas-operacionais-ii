@@ -21,6 +21,9 @@
 #include <time.h>
 #include <errno.h>
 #include <pwd.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
 
 // Server config
 #define IP_SIZE 15
@@ -903,6 +906,10 @@ int main()
     char server_ip[IP_SIZE];
     int server_port;
 
+    SSL_METHOD *method;
+    SSL_CTX *ctx;
+    SSL *ssl;
+
     printf("[server] enter server ip: ");
     scanf("%s", server_ip);
 
@@ -910,8 +917,41 @@ int main()
     scanf("%s", port);
     server_port = atoi(port);
 
+    //init CTX
+    SSL_library_init();
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+    method = SSLv23_server_method();
+    ctx = SSL_CTX_new(method);
+    if ( ctx == NULL )
+    {
+        ERR_print_errors_fp(stderr);
+        abort();
+    }
+
+    //load certificates
+    /* set the local certificate from CertFile */
+    if ( SSL_CTX_use_certificate_file(ctx, "CertFile.pem", SSL_FILETYPE_PEM) <= 0 )
+    {
+        ERR_print_errors_fp(stderr);
+        abort();
+    }
+    /* set the private key from KeyFile (may be the same as CertFile) */
+    if ( SSL_CTX_use_PrivateKey_file(ctx, "KeyFile.pem", SSL_FILETYPE_PEM) <= 0 )
+    {
+        ERR_print_errors_fp(stderr);
+        abort();
+    }
+    /* verify private key */
+    if ( !SSL_CTX_check_private_key(ctx) )
+    {
+        fprintf(stderr, "Private key does not match the public certificate\n");
+        abort();
+    }
+
     // Create, Bind, Listen
     server_number = createAndListen(server_ip, server_port);
+
     if(server_number < 0)
     {
         printf("[server] server failed em iniciar\n");
@@ -950,6 +990,32 @@ int main()
             return -1;
         }
 
+        // create and set SSL context
+        ssl = SSL_new(ctx);
+        SSL_set_fd(ssl, client_number);
+
+        if ( SSL_accept(ssl) == -1 )
+            ERR_print_errors_fp(stderr);
+        else
+        {
+            X509 *cert;
+            char *line;
+
+            cert = SSL_get_peer_certificate(ssl);
+            if ( cert != NULL )
+            {
+                printf("[server] Server certificates:\n");
+                line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+                printf("[server] Subject: %s\n", line);
+                free(line);
+                line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+                printf("[server] Issuer: %s\n", line);
+                free(line);
+                X509_free(cert);
+            }
+            else
+                printf("[server] No certificates.\n");
+        }
 
         // Seta client info
         pthread_mutex_lock(&lock);
