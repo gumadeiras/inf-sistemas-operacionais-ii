@@ -2,6 +2,8 @@
 
 Trabalhos da disciplina de Sistemas Operacionais II N - Instituto de Informática da UFRGS
 
-Trabalho 1 - 'Dropbox', threads e sincronização
+Trabalho: 'Dropbox'
 
-Trabalho 2 - Adicionar criptografia (OpenSSL), sincronização de relógios e replica passiva
+Etapa 1 - Threads e sincronização (semáforos, monitores)
+
+Etapa 2 - Criptografia (OpenSSL), sincronização de relógios e réplica passiva de servidores
