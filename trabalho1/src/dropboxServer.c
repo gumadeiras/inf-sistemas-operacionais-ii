@@ -43,6 +43,7 @@
 #define CMD_SYNC_CLIENT 6
 #define CMD_SYNC_SERVER 7
 #define CMD_NEWFILES 8
+#define CMD_GETTIME 9
 
 struct client_info
 {
@@ -55,6 +56,13 @@ struct client_info
     int new_files;
     SSL *ssl;
 };
+
+struct file_info
+{
+    char* filename;
+    char* file_lastmodified;
+};
+
 struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE ONE
 pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
 
@@ -137,6 +145,10 @@ int getCommand(const char* string)
     if (strcmp(firstString, "newfiles") == 0)
     {
         command = CMD_NEWFILES;
+    }
+    if (strcmp(firstString, "gettime") == 0)
+    {
+        command = CMD_GETTIME;
     }
 
     free(copy);
@@ -378,6 +390,19 @@ int process_hi(SSL *sockfd, const char* buffer, int id)
     char message[BUFFER_SIZE];
     memset(message, 0, BUFFER_SIZE);
     strcpy(message, "HI OK");
+    enviar(sockfd, message, BUFFER_SIZE, NULL);
+}
+
+int process_gettime(SSL *sockfd, const char* buffer, int id)
+{
+    char message[BUFFER_SIZE];
+    memset(message, 0, BUFFER_SIZE);
+
+    time_t servertime;
+    time(&servertime);
+    sprintf(servertime, "%d"); // Não entendi o 3º param dessa func. Me parece ser opcional.
+
+    strcpy(message, servertime);
     enviar(sockfd, message, BUFFER_SIZE, NULL);
 }
 
@@ -875,6 +900,9 @@ void* thread_function(void* thread_function_arg)
             case CMD_NEWFILES:
                 process_newfiles(client_ssl, buffer, client_id);
             break;
+
+            case CMD_GETTIME:
+                process_gettime(client_number, buffer, client_id);
 
             default:
                 process_error(client_ssl, buffer, client_id);

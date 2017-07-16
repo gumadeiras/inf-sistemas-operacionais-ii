@@ -26,6 +26,7 @@
 #define BUFFER_SIZE 1024
 #define USERNAME_SIZE 100
 #define IP_SIZE 15
+#define NUM_MAX_FILES 10
 
 #define CMD_ERROR -1
 #define CMD_UPLOAD 1
@@ -43,6 +44,14 @@ int shared_socket;
 pthread_mutex_t lock;
 int shared_inotify_isenabled = 10;
 SSL *ssl;
+
+struct file_info
+{
+    char* filename;
+    char* file_lastmodified;
+};
+
+struct file_info file_info_array[NUM_MAX_FILES];
 
 int enviar(int s, char* b, int size, int flags)
 {
@@ -960,13 +969,82 @@ void* client_sync_thread(void* thread_function_arg)
         {
             // Upload all files to server
             process_sync_server(shared_socket, shared_username);
-
+            // getTimeServer(buffer);
             // Para nao repetir a sincronizacao
             pthread_mutex_lock(&lock);
             shared_update = 0;
             pthread_mutex_unlock(&lock);
         }
     }
+}
+
+int getTimeServer(const char* buffer)
+{
+    // Variaveis para sincronizar lastmodified com server
+    time_t timesent, timereceived, servertime, final;
+    FILE* filefd;
+    char* serverT;
+    char* copy;
+    char* command;
+    char* filepath;
+    char* filename;
+    char  filesize[50];
+    char  message[BUFFER_SIZE];
+
+    // Pega dados do comando que estao separados por um espaco
+    copy = strdup(buffer);
+    command = strdup(strtok(copy, " "));
+    filepath = strdup(strtok(NULL, " "));
+
+    // Tenta abrir arquivo
+    filefd = fopen (filepath, "rb");
+    if (filefd == NULL) {
+        printf("[client] Nao pode abrir arquivo\n",NULL);
+        return -1;
+    }
+
+    // Pega filename
+    filename = strdup(basename(filepath));
+
+    // Pega filesize
+    fseek(filefd, 0L, SEEK_END);
+    sprintf(filesize, "%d", ftell(filefd));
+    rewind(filefd);
+
+    // Monta comando para perguntar a hora do server
+    memset(message, 0, BUFFER_SIZE);
+    strcpy(message, "gettime ");
+
+    // Pega hora de envio
+    time(&timesent);
+
+    // Pega hora do server
+    enviar(shared_socket, message, BUFFER_SIZE, NULL);
+    serverT = receber(shared_socket, message, BUFFER_SIZE, NULL);
+    // Pega hora da resposta
+    time(&timereceived);
+
+    servertime = atoi(serverT);
+
+    // Algoritmo de cristian simplificado para sincronizar tempo
+    final = (servertime + ((timereceived - timesent) / 2));
+
+    //procura arquivo na lista de arquivos e altera horário
+    int i;
+    for (i = 0; i < NUM_MAX_FILES; ++i)
+    {
+        pthread_mutex_lock(&lock);
+        char* fn = file_info_array[i].filename;
+        pthread_mutex_unlock(&lock);
+        if (strcmp(fn, filename) == 0)
+        {
+            pthread_mutex_lock(&lock);
+            file_info_array[i].file_lastmodified = final;
+            pthread_mutex_unlock(&lock);
+        }
+    }
+
+    fclose(filefd);
 }
 
 int check_if_server_has_changed(int sockfd, char* username)
