@@ -410,7 +410,6 @@ int process_username(SSL *sockfd, const char* buffer, int id)
         strcat(message, port);
         strcat(message, " ");
         enviar(sockfd, message, BUFFER_SIZE, NULL);
-        printf("3\n");
     }
 }
 

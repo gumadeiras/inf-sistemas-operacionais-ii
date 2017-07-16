@@ -843,10 +843,10 @@ int conecta()
 
     // Pega dados do comando
     copy = strdup(buffer);
-    printf("1\n");
-    if (reconnect == 0)
+
+    if (position%2 == 0)
         process_rms(buffer);
-    printf("2\n");
+
     command = strdup(strtok(copy, " "));
 
     if (strcmp(command, "NOTOK") == 0)
@@ -878,30 +878,22 @@ int process_rms(const char* buffer)
     char* copy;
     char ip[IP_SIZE];
     char port[IP_SIZE];
-    printf("1\n");
     copy = strdup(buffer);
     // command
     strcpy(ip, strdup(strtok(copy, " ")));
 
-    printf("2\n");
     // for (i = 0; i < NUM_MAX_FILES; ++i)
     // {
     // ip1
-    printf("3\n");
     if (ip == '\0')
     {
-        printf("3.1\n");
         return 0;
     }
     strcpy(ip, strdup(strtok(NULL, " ")));
-    printf("4\n");
     strcpy(replica_array[position].ip, ip);
     // port1
-    printf("5\n");
     strcpy(port, strdup(strtok(NULL, " ")));
-    printf("6: %s\n", port);
     replica_array[position].port = atoi(port);
-    printf("7\n");
     // }
 }
 
