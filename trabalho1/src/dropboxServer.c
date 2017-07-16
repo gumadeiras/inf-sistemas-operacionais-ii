@@ -69,6 +69,7 @@ pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
 char server_ip[IP_SIZE];
 int server_port;
 char rm_ip[IP_SIZE];
+char port[IP_SIZE];
 int rm_port;
 SSL *rmssl;
 
@@ -403,7 +404,13 @@ int process_username(SSL *sockfd, const char* buffer, int id)
         // Envia ok
         memset(message, 0, BUFFER_SIZE);
         strcpy(message, "OK");
+        strcat(message, " ");
+        strcat(message, rm_ip);
+        strcat(message, " ");
+        strcat(message, port);
+        strcat(message, " ");
         enviar(sockfd, message, BUFFER_SIZE, NULL);
+        printf("3\n");
     }
 }
 
@@ -539,7 +546,7 @@ int receive_one_file(SSL *sockfd, char* filepath, char* filename, int filesize)
 int process_sync_server(SSL *sockfd, const char* buffer, int id)
 {
     int ret = 0;
-    printf("OLHA AQUI OWWWWWWW: %s\n", buffer);
+    // printf("OLHA AQUI OWWWWWWW: %s\n", buffer);
     // Pega folderpath
     char* folderpath;
     char* username;
@@ -1015,7 +1022,6 @@ void* rm_function(void* thread_function_arg)
 {
     struct sockaddr_in serveraddr;
     char buffer[BUFFER_SIZE];
-    char port[IP_SIZE];
     int sockfd;
 
     printf("[RM] enter server ip: ");
