@@ -851,7 +851,6 @@ int process_sync_client(const int sockfd, const char* buffer, char* username)
 
     int ret;
 
-
     // Desativa inotify
     pthread_mutex_lock(&lock);
     shared_inotify_isenabled = 0;

@@ -44,6 +44,7 @@
 #define CMD_SYNC_SERVER 7
 #define CMD_NEWFILES 8
 #define CMD_GETTIME 9
+#define CMD_RMSYNC 10
 
 struct client_info
 {
@@ -65,6 +66,11 @@ struct file_info
 
 struct client_info client_info_array[NUM_MAX_CLIENT]; // SHARED VARIABLE ONE
 pthread_mutex_t lock; // SHARED-VARIABLE-ONE LOCK
+char server_ip[IP_SIZE];
+int server_port;
+char rm_ip[IP_SIZE];
+int rm_port;
+SSL *rmssl;
 
 int enviar(SSL *ssl, char* b, int size, int flags)
 {
@@ -149,6 +155,10 @@ int getCommand(const char* string)
     if (strcmp(firstString, "gettime") == 0)
     {
         command = CMD_GETTIME;
+    }
+    if (strcmp(firstString, "rmsync") == 0)
+    {
+        command = CMD_RMSYNC;
     }
 
     free(copy);
@@ -326,63 +336,75 @@ int process_username(SSL *sockfd, const char* buffer, int id)
     strcpy(syncpath, homedir);
 
     // Monta folderpath
-    pthread_mutex_lock(&lock);
-    strcpy(client_info_array[id].username, username);
-    memset(client_info_array[id].folderPath, 0, PATH_SIZE);
-    strcpy(client_info_array[id].folderPath, syncpath);
-    strcat(client_info_array[id].folderPath, "/server/");
-    strcat(client_info_array[id].folderPath, username);
-    strcat(client_info_array[id].folderPath, "/");
-    char* folder = strdup(client_info_array[id].folderPath);
-    pthread_mutex_unlock(&lock);
-
-    // Acha um client_id valido
-    int i = 0;
-    int connections = 0;
-    pthread_mutex_lock(&lock);
-    for (i = 0; i < NUM_MAX_CLIENT; ++i)
+    if (strcmp(username, "rmserver") == 0)
     {
-        int cmp = strcmp(client_info_array[i].username, username);
-        if (cmp == 0)
+        pthread_mutex_lock(&lock);
+        strcpy(client_info_array[id].username, username);
+        memset(client_info_array[id].folderPath, 0, PATH_SIZE);
+        strcpy(client_info_array[id].folderPath, syncpath);
+        strcat(client_info_array[id].folderPath, "/server/");
+        char* folder = strdup(client_info_array[id].folderPath);
+        pthread_mutex_unlock(&lock);
+
+        memset(message, 0, BUFFER_SIZE);
+        strcpy(message, "rmok");
+        enviar(sockfd, message, BUFFER_SIZE, NULL);
+    } else {
+        pthread_mutex_lock(&lock);
+        strcpy(client_info_array[id].username, username);
+        memset(client_info_array[id].folderPath, 0, PATH_SIZE);
+        strcpy(client_info_array[id].folderPath, syncpath);
+        strcat(client_info_array[id].folderPath, "/server/");
+        strcat(client_info_array[id].folderPath, username);
+        strcat(client_info_array[id].folderPath, "/");
+        char* folder = strdup(client_info_array[id].folderPath);
+        pthread_mutex_unlock(&lock);
+
+        // Acha um client_id valido
+        int i = 0;
+        int connections = 0;
+        pthread_mutex_lock(&lock);
+        for (i = 0; i < NUM_MAX_CLIENT; ++i)
         {
-            ++connections;
+            int cmp = strcmp(client_info_array[i].username, username);
+            if (cmp == 0)
+            {
+                ++connections;
+            }
         }
-    }
 
-    if (connections > 2)
-    {
-        memset(message, 0, BUFFER_SIZE);
-        strcpy(message, "NOTOK");
-        closeClient(id);
-        enviar(sockfd, message, BUFFER_SIZE, NULL);
-
-        return;
-    }
-    pthread_mutex_unlock(&lock);
-
-    int client_id = findSlotId();
-    if(client_id == -1)
+        if (connections > 2)
         {
-        printf("[server] i am full!\n");
+            memset(message, 0, BUFFER_SIZE);
+            strcpy(message, "NOTOK");
+            closeClient(id);
+            enviar(sockfd, message, BUFFER_SIZE, NULL);
+
+            return;
+        }
+        pthread_mutex_unlock(&lock);
+
+        int client_id = findSlotId();
+        if(client_id == -1)
+            {
+            printf("[server] i am full!\n");
+            memset(message, 0, BUFFER_SIZE);
+            strcpy(message, "SERVER");
+            closeClient(id);
+            enviar(sockfd, message, BUFFER_SIZE, NULL);
+            return;
+        }
+
+        // Cria pasta do usuario
+        if (stat("folder", &st) == -1) {
+            mkdir(folder, 0700);
+        }
+
+        // Envia ok
         memset(message, 0, BUFFER_SIZE);
-        strcpy(message, "SERVER");
-        closeClient(id);
+        strcpy(message, "OK");
         enviar(sockfd, message, BUFFER_SIZE, NULL);
-        return;
     }
-
-    // Cria pasta do usuario
-    if (stat("folder", &st) == -1) {
-        mkdir(folder, 0700);
-    }
-
-    // Envia ok
-    memset(message, 0, BUFFER_SIZE);
-    strcpy(message, "OK");
-    enviar(sockfd, message, BUFFER_SIZE, NULL);
-
-    // Limpa sujeira
-    free(folder);
 }
 
 int process_hi(SSL *sockfd, const char* buffer, int id)
@@ -517,14 +539,26 @@ int receive_one_file(SSL *sockfd, char* filepath, char* filename, int filesize)
 int process_sync_server(SSL *sockfd, const char* buffer, int id)
 {
     int ret = 0;
-
+    printf("OLHA AQUI OWWWWWWW: %s\n", buffer);
     // Pega folderpath
     char* folderpath;
+    char* username;
     pthread_mutex_lock(&lock);
     folderpath = strdup(client_info_array[id].folderPath);
+    username = strdup(client_info_array[id].username);
     client_info_array[id].new_files = 1;
     pthread_mutex_unlock(&lock);
 
+    if (strcmp(username, "rmserver") == 0)
+    {
+        char* copy = strdup(buffer);
+        username = strdup(strtok(copy, " "));
+        username = strdup(strtok(NULL, " "));
+        username = strdup(strtok(NULL, " "));
+        strcat(folderpath,"/");
+        strcat(folderpath,username);
+        strcat(folderpath,"/");
+    }
     // Apaga tudo
     deleteAllFiles(folderpath);
 
@@ -566,7 +600,9 @@ int process_sync_server(SSL *sockfd, const char* buffer, int id)
             break;
         }
     }
-
+    printf("chamando RMSYNC\n");
+    process_rmsync(sockfd, buffer, id);
+    printf("retornou RMSYNC\n");
     printf("server sync FINALIZADO\n");
 }
 
@@ -656,6 +692,146 @@ int findSlotId()
     pthread_mutex_unlock(&lock);
 
     return client_id;
+}
+
+int process_rmsync(SSL* client_number, const char* buffer, int client_id)
+{
+    printf("rmsync ON\n");
+    if (rmssl == NULL)
+    {
+        printf("rmssl NULL, volta\n");
+        return 0;
+    }
+
+    DIR* pDir;
+    struct dirent* pDirent;
+    int ret;
+
+    pthread_mutex_lock(&lock);
+    char* user = strdup(client_info_array[client_id].username);
+    pthread_mutex_unlock(&lock);
+    // Get home user folder
+    char folderpath[BUFFER_SIZE];
+    struct passwd* pw = getpwuid(getuid());
+    memset(folderpath, 0, BUFFER_SIZE);
+    strcpy(folderpath, pw->pw_dir);
+    strcat(folderpath, "/server/");
+    strcat(folderpath, user);
+    strcat(folderpath, "/");
+
+    // Envia comando para o server
+    char message[BUFFER_SIZE];
+    memset(message, 0, BUFFER_SIZE);
+    strcpy(message, "SYNCSERVER");
+    strcat(message," ");
+    strcat(message,"arg1");
+    strcat(message," ");
+    strcat(message,user);
+    strcat(message," ");
+    ret = enviar(rmssl, message, BUFFER_SIZE, NULL);
+    if(ret < 0)
+    {
+        printf("[RM] process_rmsync: send error\n", NULL);
+    }
+
+
+    // Envia arquivos
+    pDir = opendir(folderpath);
+    if (pDir == NULL) {
+        printf("process_rmsync: opendir error :(\n", NULL);
+        return -1;
+    }
+    while ((pDirent = readdir(pDir)) != NULL)
+    {
+        if(pDirent->d_type == DT_REG)
+        {
+            FILE* filefd;
+            int data_read = 0;
+            int remain_data = 0;
+
+            char message[BUFFER_SIZE];
+
+            char filepath[1024];
+            char filename[512];
+            char filesizes[512];
+            int filesize;
+
+
+            // Filepath
+            strcpy(filename, pDirent->d_name);
+            strcpy(filepath, folderpath);
+            strcat(filepath, "/");
+            strcat(filepath, filename);
+
+
+            // Recebe pedido de um
+            // printf("Waiting server permission...\n", NULL);
+            receber(rmssl, message, BUFFER_SIZE, MSG_WAITALL);
+
+
+            // Envia um
+            filefd = fopen (filepath, "rb");
+            if (filefd == NULL) {
+                printf("process_rmsync: fopen error :(\n", NULL);
+                return -1;
+            }
+
+            // Filesize
+            fseek(filefd, 0L, SEEK_END);
+            sprintf(filesizes, "%ld", ftell(filefd));
+            rewind(filefd);
+            remain_data = atoi(filesizes);
+            filesize = atoi(filesizes);
+
+
+            // Monta comando
+            memset(message, 0, BUFFER_SIZE);
+            strcpy(message, "FILE");
+            strcat(message," ");
+            strcat(message, filename);
+            strcat(message," ");
+            strcat(message, filesizes);
+
+
+            // Envia comando
+            ret = enviar(rmssl, message, BUFFER_SIZE, NULL);
+            if(ret < 0)
+            {
+                printf("process_rmsync: send error :(\n", NULL);
+            }
+
+
+            // Envia arquivo
+            memset(message, 0, BUFFER_SIZE);
+            remain_data = atoi(filesizes);
+            int j =0;
+            while (remain_data > 0 && (data_read = fread(&message, 1, BUFFER_SIZE, filefd)) > 0)
+            {
+                j++;
+
+                int data_sent = enviar(rmssl, message, data_read, NULL);
+
+                remain_data -= data_sent;
+
+                memset(message, 0, BUFFER_SIZE);
+
+                // printf("  dataread::%d data_sent::%d remaindata::%d filesize::%d j::%d \n", data_read, data_sent, remain_data, filesize, j);
+            }
+            sleep(1);
+            fclose(filefd);
+        }
+    }
+    closedir(pDir);
+
+    // Recebe pedido
+    // printf("Waiting server permission...\n", NULL);
+    receber(rmssl, message, BUFFER_SIZE, MSG_WAITALL);
+
+    // Avisa que terminou
+    memset(message, 0, BUFFER_SIZE);
+    strcpy(message, "FIM A B C D");
+    enviar(rmssl, message, BUFFER_SIZE, NULL);
+    printf("rmsync OFF\n");
 }
 
 int process_sync_client(SSL *sockfd, const char* buffer, int id)
@@ -818,7 +994,7 @@ int process_newfiles(SSL *sockfd, const char* buffer, int id)
             pthread_mutex_lock(&lock);
             client_info_array[i].new_files = 0;
             pthread_mutex_unlock(&lock);
-            // printf("3 process_newfiles(): VAMO SYNC\n");
+            printf("3 process_newfiles(): VAMO SYNC\n");
             strcpy(message, "NOTOK");
             enviar(sockfd, message, BUFFER_SIZE, NULL);
             return 0;
@@ -833,6 +1009,132 @@ int process_newfiles(SSL *sockfd, const char* buffer, int id)
     printf("\n process_newfiles(): Bye \n");
 
     return 0;
+}
+
+void* rm_function(void* thread_function_arg)
+{
+    struct sockaddr_in serveraddr;
+    char buffer[BUFFER_SIZE];
+    char port[IP_SIZE];
+    int sockfd;
+
+    printf("[RM] enter server ip: ");
+    scanf("%s", rm_ip);
+
+    printf("[RM] enter server port: ");
+    scanf("%s", port);
+    rm_port = atoi(port);
+
+    memset(buffer, 0, BUFFER_SIZE);
+
+    // Cria
+    sockfd = socket(AF_INET , SOCK_STREAM , 0);
+    if (sockfd < 0)
+    {
+        printf("[RM] error opening socket\n", NULL);
+        return 1;
+    }
+
+    // Configura
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_addr.s_addr = inet_addr(rm_ip);
+    serveraddr.sin_port = htons(rm_port);
+
+    // Conecta
+    if (connect(sockfd , (struct sockaddr *) &serveraddr , sizeof(serveraddr)) < 0)
+    {
+        printf("[RM] error connecting to server\n", NULL);
+        return 1;
+    }
+
+    SSL_library_init();
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+
+    SSL_METHOD *method;
+    SSL_CTX *ctx;
+    method = SSLv23_client_method();
+    ctx = SSL_CTX_new(method);
+    if (ctx == NULL) {
+        ERR_print_errors_fp(stderr);
+        abort();
+    }
+
+    rmssl = SSL_new(ctx);
+    SSL_set_fd(rmssl, sockfd);
+    if (SSL_connect(rmssl) == -1)
+        ERR_print_errors_fp(stderr);
+    else {
+        //GG
+        X509 *cert;
+        char *line;
+        cert = SSL_get_peer_certificate(rmssl);
+        if (cert != NULL) {
+            printf("[RM] Client certificates:\n");
+            line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+            printf("[RM] Subject: %s\n", line);
+            free(line);
+            line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+            printf("[RM] Issuer: %s\n", line);
+            free(line);
+            X509_free(cert);
+        }
+        else
+            printf("[RM] No certificates.\n");
+    }
+
+    // Envia HI
+    memset(buffer, 0, BUFFER_SIZE);
+    strcpy(buffer, "HI");
+    if(enviar(rmssl, buffer, BUFFER_SIZE, 0)  < 0)
+    {
+        printf("[client] RM Hi sent failed\n", NULL);
+        return 1;
+    }
+
+    // Recebe HI
+    memset(buffer, 0, BUFFER_SIZE);
+    if(receber(rmssl, buffer, BUFFER_SIZE, MSG_WAITALL) < 0)
+    {
+        printf("[client] RM HI recv failed\n", NULL);
+        return 1;
+    }
+
+    // Envia username
+    memset(buffer, 0, BUFFER_SIZE);
+    strcpy(buffer, "USERNAME");
+    strcat(buffer, " ");
+    strcat(buffer, "rmserver");
+    strcat(buffer, "\0");
+    if (enviar(rmssl, buffer, BUFFER_SIZE, 0) < 0)
+    {
+        puts("[RM] send failed.\n");
+        return 1;
+    }
+
+    // Recebe RM
+    memset(buffer, 0, BUFFER_SIZE);
+    if( receber(rmssl, buffer, BUFFER_SIZE, MSG_WAITALL) < 0)
+    {
+        printf("[client] RM recv failed.\n", NULL);
+        return 1;
+    }
+
+    char* copy;
+    char* command;
+
+    // Pega dados do comando
+    copy = strdup(buffer);
+    command = strdup(strtok(copy, " "));
+
+    if (strcmp(command, "rmok") != 0)
+    {
+        printf("[RM] failed to connect to primary RM\n");
+        exit(0);
+    }
+    printf("[RM] connected to primary server\n", NULL);
+
+    free(command);
 }
 
 void* thread_function(void* thread_function_arg)
@@ -903,6 +1205,11 @@ void* thread_function(void* thread_function_arg)
 
             case CMD_GETTIME:
                 process_gettime(client_number, buffer, client_id);
+            break;
+
+            case CMD_RMSYNC:
+                process_rmsync(client_number, buffer, client_id);
+            break;
 
             default:
                 process_error(client_ssl, buffer, client_id);
@@ -932,13 +1239,11 @@ int main()
 {
     // Threads
     pthread_t mypthreads[NUM_MAX_CLIENT];
-
+    pthread_t rm_thread;
     // Server
     int server_number;
 
     char port[IP_SIZE];
-    char server_ip[IP_SIZE];
-    int server_port;
 
     SSL_METHOD *method;
     SSL_CTX *ctx;
@@ -998,6 +1303,21 @@ int main()
     strcpy(syncpath, homedir);
     strcat(syncpath, "/server/");
     mkdir(syncpath, 0700);
+
+    //server as client ~ replica manager
+    char answer[USERNAME_SIZE];
+    rmssl = NULL;
+    printf("[server] connect to primary RM? (y/n)\n");
+    scanf("%s", answer);
+    if (strcmp(answer, "y") == 0)
+    {
+        int threadsv = pthread_create(&rm_thread, NULL, rm_function, NULL);
+        if (threadsv < 0)
+        {
+            printf("[server] RM pthread_create failed (errstr=%s) (errno=%d)\n", strerror(errno), errno);
+            exit(0);
+        }
+    }
 
     // Aceita clientes para sempre
     int client_id = 0;
